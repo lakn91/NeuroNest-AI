@@ -1,0 +1,104 @@
+{
+  "common": {
+    "home": "Home",
+    "chat": "Chat",
+    "projects": "Projects",
+    "settings": "Settings",
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "signOut": "Sign out",
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success"
+  },
+  "auth": {
+    "email": "Email address",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "fullName": "Full name",
+    "rememberMe": "Remember me",
+    "forgotPassword": "Forgot your password?",
+    "createAccount": "Create account",
+    "alreadyHaveAccount": "Already have an account?",
+    "dontHaveAccount": "Don't have an account?",
+    "resetPassword": "Reset password",
+    "resetPasswordInstructions": "Enter your email address and we'll send you a link to reset your password.",
+    "sendResetLink": "Send reset link",
+    "backToLogin": "Back to login",
+    "passwordsDontMatch": "Passwords don't match",
+    "passwordTooShort": "Password must be at least 6 characters",
+    "emailInUse": "Email is already in use",
+    "invalidEmail": "Invalid email format",
+    "weakPassword": "Password is too weak",
+    "invalidCredentials": "Invalid email or password",
+    "accountDisabled": "This account has been disabled",
+    "resetLinkSent": "Password reset email sent. Check your inbox for further instructions.",
+    "resetLinkSentGeneric": "If the email exists, a password reset link will be sent."
+  },
+  "chat": {
+    "typeMessage": "Type your message here...",
+    "send": "Send",
+    "processing": "Processing...",
+    "attachedFiles": "Attached files:",
+    "voiceInput": "Voice input",
+    "uploadFile": "Upload file",
+    "poweredBy": "Powered by AI"
+  },
+  "settings": {
+    "apiProvider": "AI Provider",
+    "apiKey": "API Key",
+    "apiKeyDescription": "Your API key is stored securely and used only for making requests to the AI provider.",
+    "getGeminiKey": "Get your Gemini API key from the Google AI Studio",
+    "getOpenAIKey": "Get your OpenAI API key from the OpenAI dashboard",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "themeDescription": "Choose your preferred theme for the application.",
+    "language": "Language",
+    "languageDescription": "Choose your preferred language for the application.",
+    "settingsSaved": "Settings saved successfully!",
+    "settingsError": "Failed to save settings. Please try again."
+  },
+  "projects": {
+    "yourProjects": "Your Projects",
+    "createNew": "Create New Project",
+    "noProjects": "No projects yet",
+    "startCreating": "Start a new conversation to create your first project.",
+    "viewDetails": "View Details",
+    "edit": "Edit",
+    "delete": "Delete",
+    "createdAt": "Created",
+    "files": "files"
+  },
+  "landing": {
+    "hero": {
+      "title": "Transform Ideas into <span>Functional Projects</span>",
+      "subtitle": "NeuroNest-AI is a multi-purpose intelligent agent platform that converts your ideas into real, executable code and projects.",
+      "startCreating": "Start Creating",
+      "learnMore": "Learn More"
+    },
+    "features": {
+      "title": "Key Features",
+      "multiModal": {
+        "title": "Multi-modal Input",
+        "description": "Communicate with our agents through text, voice, or by uploading files to provide context."
+      },
+      "codeGeneration": {
+        "title": "Code Generation",
+        "description": "Our specialized agents generate clean, functional code based on your requirements."
+      },
+      "executionEnv": {
+        "title": "Execution Environment",
+        "description": "Run and test your generated projects directly in our secure execution environment."
+      }
+    },
+    "cta": {
+      "title": "Ready to transform your ideas into reality?",
+      "subtitle": "Start creating with NeuroNest-AI today and experience the power of intelligent agents.",
+      "button": "Get Started Now"
+    }
+  }
+}

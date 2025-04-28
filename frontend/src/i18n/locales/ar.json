@@ -1,0 +1,104 @@
+{
+  "common": {
+    "home": "الرئيسية",
+    "chat": "المحادثة",
+    "projects": "المشاريع",
+    "settings": "الإعدادات",
+    "signIn": "تسجيل الدخول",
+    "signUp": "إنشاء حساب",
+    "signOut": "تسجيل الخروج",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "loading": "جاري التحميل...",
+    "error": "خطأ",
+    "success": "تم بنجاح"
+  },
+  "auth": {
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "confirmPassword": "تأكيد كلمة المرور",
+    "fullName": "الاسم الكامل",
+    "rememberMe": "تذكرني",
+    "forgotPassword": "نسيت كلمة المرور؟",
+    "createAccount": "إنشاء حساب",
+    "alreadyHaveAccount": "لديك حساب بالفعل؟",
+    "dontHaveAccount": "ليس لديك حساب؟",
+    "resetPassword": "إعادة تعيين كلمة المرور",
+    "resetPasswordInstructions": "أدخل بريدك الإلكتروني وسنرسل لك رابطًا لإعادة تعيين كلمة المرور.",
+    "sendResetLink": "إرسال رابط إعادة التعيين",
+    "backToLogin": "العودة إلى تسجيل الدخول",
+    "passwordsDontMatch": "كلمات المرور غير متطابقة",
+    "passwordTooShort": "يجب أن تكون كلمة المرور 6 أحرف على الأقل",
+    "emailInUse": "البريد الإلكتروني مستخدم بالفعل",
+    "invalidEmail": "صيغة البريد الإلكتروني غير صحيحة",
+    "weakPassword": "كلمة المرور ضعيفة جدًا",
+    "invalidCredentials": "بريد إلكتروني أو كلمة مرور غير صحيحة",
+    "accountDisabled": "تم تعطيل هذا الحساب",
+    "resetLinkSent": "تم إرسال بريد إلكتروني لإعادة تعيين كلمة المرور. تحقق من صندوق الوارد للحصول على مزيد من التعليمات.",
+    "resetLinkSentGeneric": "إذا كان البريد الإلكتروني موجودًا، سيتم إرسال رابط إعادة تعيين كلمة المرور."
+  },
+  "chat": {
+    "typeMessage": "اكتب رسالتك هنا...",
+    "send": "إرسال",
+    "processing": "جاري المعالجة...",
+    "attachedFiles": "الملفات المرفقة:",
+    "voiceInput": "إدخال صوتي",
+    "uploadFile": "رفع ملف",
+    "poweredBy": "مدعوم بالذكاء الاصطناعي"
+  },
+  "settings": {
+    "apiProvider": "مزود الذكاء الاصطناعي",
+    "apiKey": "مفتاح API",
+    "apiKeyDescription": "يتم تخزين مفتاح API الخاص بك بشكل آمن واستخدامه فقط لإجراء طلبات إلى مزود الذكاء الاصطناعي.",
+    "getGeminiKey": "احصل على مفتاح Gemini API من Google AI Studio",
+    "getOpenAIKey": "احصل على مفتاح OpenAI API من لوحة تحكم OpenAI",
+    "theme": "السمة",
+    "themeLight": "فاتح",
+    "themeDark": "داكن",
+    "themeSystem": "النظام",
+    "themeDescription": "اختر السمة المفضلة لديك للتطبيق.",
+    "language": "اللغة",
+    "languageDescription": "اختر اللغة المفضلة لديك للتطبيق.",
+    "settingsSaved": "تم حفظ الإعدادات بنجاح!",
+    "settingsError": "فشل في حفظ الإعدادات. يرجى المحاولة مرة أخرى."
+  },
+  "projects": {
+    "yourProjects": "مشاريعك",
+    "createNew": "إنشاء مشروع جديد",
+    "noProjects": "لا توجد مشاريع بعد",
+    "startCreating": "ابدأ محادثة جديدة لإنشاء مشروعك الأول.",
+    "viewDetails": "عرض التفاصيل",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "createdAt": "تم الإنشاء",
+    "files": "ملفات"
+  },
+  "landing": {
+    "hero": {
+      "title": "حوّل الأفكار إلى <span>مشاريع عملية</span>",
+      "subtitle": "NeuroNest-AI هي منصة وكلاء ذكية متعددة الأغراض تحول أفكارك إلى كود ومشاريع حقيقية قابلة للتنفيذ.",
+      "startCreating": "ابدأ الإنشاء",
+      "learnMore": "اعرف المزيد"
+    },
+    "features": {
+      "title": "الميزات الرئيسية",
+      "multiModal": {
+        "title": "إدخال متعدد الأنماط",
+        "description": "تواصل مع وكلائنا من خلال النص أو الصوت أو عن طريق تحميل الملفات لتوفير السياق."
+      },
+      "codeGeneration": {
+        "title": "توليد الكود",
+        "description": "وكلاؤنا المتخصصون يولدون كودًا نظيفًا وعمليًا بناءً على متطلباتك."
+      },
+      "executionEnv": {
+        "title": "بيئة التنفيذ",
+        "description": "قم بتشغيل واختبار مشاريعك المولدة مباشرة في بيئة التنفيذ الآمنة لدينا."
+      }
+    },
+    "cta": {
+      "title": "هل أنت مستعد لتحويل أفكارك إلى واقع؟",
+      "subtitle": "ابدأ الإنشاء مع NeuroNest-AI اليوم واختبر قوة الوكلاء الأذكياء.",
+      "button": "ابدأ الآن"
+    }
+  }
+}
