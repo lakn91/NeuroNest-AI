@@ -11,7 +11,9 @@
     "cancel": "Cancel",
     "loading": "Loading...",
     "error": "Error",
-    "success": "Success"
+    "success": "Success",
+    "language": "Language",
+    "dialect": "Dialect"
   },
   "auth": {
     "email": "Email address",
@@ -47,20 +49,36 @@
     "poweredBy": "Powered by AI"
   },
   "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "aiSettings": "AI Settings",
+    "executionSettings": "Execution Settings",
+    "speechSettings": "Speech Recognition Settings",
     "apiProvider": "AI Provider",
     "apiKey": "API Key",
     "apiKeyDescription": "Your API key is stored securely and used only for making requests to the AI provider.",
     "getGeminiKey": "Get your Gemini API key from the Google AI Studio",
     "getOpenAIKey": "Get your OpenAI API key from the OpenAI dashboard",
     "theme": "Theme",
-    "themeLight": "Light",
-    "themeDark": "Dark",
-    "themeSystem": "System",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "lightTheme": "Light Theme",
+    "darkTheme": "Dark Theme",
+    "systemTheme": "System Theme",
     "themeDescription": "Choose your preferred theme for the application.",
     "language": "Language",
     "languageDescription": "Choose your preferred language for the application.",
-    "settingsSaved": "Settings saved successfully!",
-    "settingsError": "Failed to save settings. Please try again."
+    "enableSpeechRecognition": "Enable Speech Recognition",
+    "speechLanguage": "Speech Recognition Language",
+    "enhanceAudio": "Enhance Audio Quality",
+    "useAIEnhancement": "Use AI-based Audio Enhancement",
+    "enableCodeExecution": "Enable Code Execution",
+    "codeExecutionDescription": "Allow the application to execute code in a secure environment. This is required for running and testing generated projects.",
+    "saveSettings": "Save Settings",
+    "saving": "Saving...",
+    "saveSuccess": "Settings saved successfully!",
+    "saveError": "Failed to save settings. Please try again."
   },
   "projects": {
     "yourProjects": "Your Projects",
@@ -72,6 +90,20 @@
     "delete": "Delete",
     "createdAt": "Created",
     "files": "files"
+  },
+  "audio": {
+    "browserNotSupported": "Your browser does not support audio recording",
+    "microphoneAccessError": "Could not access microphone",
+    "processingError": "Error processing audio",
+    "recognitionError": "Speech recognition failed",
+    "recording": "Recording...",
+    "processing": "Processing",
+    "startRecording": "Start recording",
+    "stopRecording": "Stop recording",
+    "language": "Language",
+    "dialect": "Dialect",
+    "enhanceAudio": "Enhance Audio",
+    "useAIEnhancement": "Use AI Enhancement"
   },
   "landing": {
     "hero": {

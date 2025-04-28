@@ -268,10 +268,19 @@ export const settingsAPI = {
 
 // Speech API
 export const speechAPI = {
-  recognizeSpeech: (audioBlob: Blob, language: string = 'en-US', dialect?: string) => {
+  recognizeSpeech: (
+    audioBlob: Blob, 
+    language: string = 'en-US', 
+    dialect?: string,
+    enhance: boolean = true,
+    useAIEnhancement: boolean = true
+  ) => {
     const formData = new FormData();
     formData.append('audio', audioBlob);
     formData.append('language', language);
+    formData.append('enhance', enhance.toString());
+    formData.append('use_ai_enhancement', useAIEnhancement.toString());
+    
     if (dialect) {
       formData.append('dialect', dialect);
     }
@@ -283,15 +292,24 @@ export const speechAPI = {
     });
   },
   
-  enhanceAudio: (audioBlob: Blob) => {
+  enhanceAudio: (audioBlob: Blob, useAIEnhancement: boolean = true) => {
     const formData = new FormData();
     formData.append('audio', audioBlob);
+    formData.append('use_ai_enhancement', useAIEnhancement.toString());
     
     return api.post('/speech/enhance', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
+  },
+  
+  getSupportedLanguages: () => {
+    return api.get('/speech/languages');
+  },
+  
+  getSupportedDialects: (language: string) => {
+    return api.get(`/speech/dialects/${language}`);
   }
 };
 

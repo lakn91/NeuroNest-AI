@@ -2,6 +2,14 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
+class SpeechSettings(BaseModel):
+    enabled: bool = True
+    language: str = "en-US"
+    dialect: Optional[str] = None
+    enhance_audio: bool = True
+    use_ai_enhancement: bool = True
+    visualization: bool = True
+    
 class UserSettings(BaseModel):
     theme: str = "system"  # light, dark, system
     language: str = "en"
@@ -9,6 +17,7 @@ class UserSettings(BaseModel):
     api_keys: Dict[str, str] = {}
     speech_recognition: bool = True
     speech_dialect: Optional[str] = None
+    speech_settings: Optional[SpeechSettings] = SpeechSettings()
     code_execution: bool = True
     
 class UserSettingsUpdate(BaseModel):
@@ -18,6 +27,7 @@ class UserSettingsUpdate(BaseModel):
     api_keys: Optional[Dict[str, str]] = None
     speech_recognition: Optional[bool] = None
     speech_dialect: Optional[str] = None
+    speech_settings: Optional[SpeechSettings] = None
     code_execution: Optional[bool] = None
     
 class UserSettingsResponse(UserSettings):
@@ -28,10 +38,14 @@ class UserSettingsResponse(UserSettings):
     class Config:
         from_attributes = True
         
+class Dialect(BaseModel):
+    code: str
+    name: str
+    
 class SupportedLanguage(BaseModel):
     code: str
     name: str
-    dialects: Optional[List[Dict[str, str]]] = None
+    dialects: Optional[List[Dialect]] = None
     
 class SupportedLanguagesResponse(BaseModel):
     languages: List[SupportedLanguage]

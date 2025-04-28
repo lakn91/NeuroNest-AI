@@ -43,22 +43,70 @@ class Settings(BaseModel):
     # Speech recognition settings
     ENABLE_SPEECH_RECOGNITION: bool = os.getenv("ENABLE_SPEECH_RECOGNITION", "true").lower() == "true"
     SPEECH_RECOGNITION_PROVIDER: str = os.getenv("SPEECH_RECOGNITION_PROVIDER", "google")
+    ENABLE_AI_AUDIO_ENHANCEMENT: bool = os.getenv("ENABLE_AI_AUDIO_ENHANCEMENT", "true").lower() == "true"
+    DEFAULT_SPEECH_LANGUAGE: str = os.getenv("DEFAULT_SPEECH_LANGUAGE", "en-US")
+    DEFAULT_SPEECH_DIALECT: Optional[str] = os.getenv("DEFAULT_SPEECH_DIALECT")
+    AUDIO_STORAGE_PATH: str = os.getenv("AUDIO_STORAGE_PATH", os.path.join(UPLOAD_DIR, "audio"))
     
     # Supported languages and dialects
     SUPPORTED_LANGUAGES: List[Dict[str, Any]] = [
         {"code": "en", "name": "English", "dialects": [
             {"code": "en-US", "name": "American English"},
             {"code": "en-GB", "name": "British English"},
+            {"code": "en-AU", "name": "Australian English"},
+            {"code": "en-IN", "name": "Indian English"},
         ]},
         {"code": "ar", "name": "العربية", "dialects": [
             {"code": "ar-SA", "name": "Saudi Arabic"},
             {"code": "ar-IQ", "name": "Iraqi Arabic"},
             {"code": "ar-EG", "name": "Egyptian Arabic"},
             {"code": "ar-MA", "name": "Moroccan Arabic"},
+            {"code": "ar-DZ", "name": "Algerian Arabic"},
+            {"code": "ar-TN", "name": "Tunisian Arabic"},
+            {"code": "ar-LB", "name": "Lebanese Arabic"},
+            {"code": "ar-JO", "name": "Jordanian Arabic"},
         ]},
         {"code": "fr", "name": "Français", "dialects": [
             {"code": "fr-FR", "name": "French (France)"},
             {"code": "fr-CA", "name": "French (Canada)"},
+            {"code": "fr-BE", "name": "French (Belgium)"},
+            {"code": "fr-CH", "name": "French (Switzerland)"},
+        ]},
+        {"code": "es", "name": "Español", "dialects": [
+            {"code": "es-ES", "name": "Spanish (Spain)"},
+            {"code": "es-MX", "name": "Spanish (Mexico)"},
+            {"code": "es-AR", "name": "Spanish (Argentina)"},
+            {"code": "es-CO", "name": "Spanish (Colombia)"},
+        ]},
+        {"code": "de", "name": "Deutsch", "dialects": [
+            {"code": "de-DE", "name": "German (Germany)"},
+            {"code": "de-AT", "name": "German (Austria)"},
+            {"code": "de-CH", "name": "German (Switzerland)"},
+        ]},
+        {"code": "zh", "name": "中文", "dialects": [
+            {"code": "zh-CN", "name": "Mandarin (China)"},
+            {"code": "zh-TW", "name": "Mandarin (Taiwan)"},
+            {"code": "zh-HK", "name": "Cantonese (Hong Kong)"},
+        ]},
+        {"code": "ja", "name": "日本語", "dialects": [
+            {"code": "ja-JP", "name": "Japanese"},
+        ]},
+        {"code": "ko", "name": "한국어", "dialects": [
+            {"code": "ko-KR", "name": "Korean"},
+        ]},
+        {"code": "ru", "name": "Русский", "dialects": [
+            {"code": "ru-RU", "name": "Russian"},
+        ]},
+        {"code": "pt", "name": "Português", "dialects": [
+            {"code": "pt-BR", "name": "Portuguese (Brazil)"},
+            {"code": "pt-PT", "name": "Portuguese (Portugal)"},
+        ]},
+        {"code": "hi", "name": "हिन्दी", "dialects": [
+            {"code": "hi-IN", "name": "Hindi"},
+        ]},
+        {"code": "ur", "name": "اردو", "dialects": [
+            {"code": "ur-PK", "name": "Urdu (Pakistan)"},
+            {"code": "ur-IN", "name": "Urdu (India)"},
         ]},
     ]
     
@@ -76,3 +124,4 @@ settings = Settings()
 # Create necessary directories
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.PROJECTS_DIR, exist_ok=True)
+os.makedirs(settings.AUDIO_STORAGE_PATH, exist_ok=True)
