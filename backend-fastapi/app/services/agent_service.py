@@ -1,20 +1,25 @@
 import os
 import logging
-from typing import Dict, List, Any, Optional
+import json
+from typing import Dict, List, Any, Optional, Tuple, Union
 import google.generativeai as genai
 from openai import OpenAI
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from anthropic import Anthropic
+from langchain.agents import AgentExecutor, create_openai_tools_agent, create_react_agent
 from langchain.agents import AgentType, initialize_agent, Tool
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.schema import SystemMessage, HumanMessage
+from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from langchain.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
+from langchain.chains import LLMChain
 from app.core.config import settings
 from app.models.agent import AgentRequest, AgentResponse, Message, AgentThought
 from app.services.file_service import extract_text_from_file
 from app.services.project_service import create_project_from_code
+from app.services.agent_tools import get_agent_tools
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +37,7 @@ class OrchestratorAgent:
             "Execute code in a secure environment",
             "Process and analyze files"
         ]
+        self.tools = get_agent_tools()
         
     def get_name(self) -> str:
         return self.name
@@ -41,6 +47,70 @@ class OrchestratorAgent:
         
     def get_capabilities(self) -> List[str]:
         return self.capabilities
+    
+    def _get_llm(self, provider: str, api_key: str, temperature: float = 0.7) -> Union[ChatOpenAI, ChatGoogleGenerativeAI, ChatAnthropic]:
+        """
+        Get the appropriate LLM based on the provider
+        """
+        if provider == "openai":
+            return ChatOpenAI(
+                model="gpt-4-turbo",
+                temperature=temperature,
+                api_key=api_key,
+                streaming=True
+            )
+        elif provider == "gemini":
+            return ChatGoogleGenerativeAI(
+                model="gemini-pro",
+                temperature=temperature,
+                google_api_key=api_key,
+                convert_system_message_to_human=True
+            )
+        elif provider == "anthropic":
+            return ChatAnthropic(
+                model="claude-3-opus-20240229",
+                temperature=temperature,
+                anthropic_api_key=api_key
+            )
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+    
+    def _create_agent_executor(
+        self, 
+        llm: Union[ChatOpenAI, ChatGoogleGenerativeAI, ChatAnthropic],
+        tools: List[BaseTool],
+        memory: Optional[ConversationBufferMemory] = None,
+        system_message: str = None
+    ) -> AgentExecutor:
+        """
+        Create an agent executor with the appropriate tools and memory
+        """
+        if system_message is None:
+            system_message = """You are an AI assistant that helps users with various tasks.
+You have access to tools that can help you complete tasks.
+Always use the appropriate tool when needed.
+If you don't know how to do something or if a tool is not available, be honest and say so.
+"""
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_message),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad")
+        ])
+        
+        if isinstance(llm, ChatOpenAI):
+            agent = create_openai_tools_agent(llm, tools, prompt)
+        else:
+            agent = create_react_agent(llm, tools, prompt)
+            
+        return AgentExecutor(
+            agent=agent,
+            tools=tools,
+            memory=memory,
+            verbose=True,
+            return_intermediate_steps=True
+        )
         
     async def process_message(
         self, 
@@ -52,7 +122,7 @@ class OrchestratorAgent:
         files: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Process a message using the appropriate AI provider
+        Process a message using the appropriate AI provider with LangChain agents
         """
         # Default provider
         provider = settings.DEFAULT_AI_PROVIDER
@@ -69,6 +139,8 @@ class OrchestratorAgent:
             api_key = settings.GEMINI_API_KEY
         elif provider == "openai" and settings.OPENAI_API_KEY:
             api_key = settings.OPENAI_API_KEY
+        elif provider == "anthropic" and settings.ANTHROPIC_API_KEY:
+            api_key = settings.ANTHROPIC_API_KEY
             
         if not api_key:
             return {
@@ -78,12 +150,14 @@ class OrchestratorAgent:
             
         # Process files if provided
         file_contents = []
+        file_ids = []
         if files:
             for file_path in files:
                 try:
                     text = await extract_text_from_file(file_path)
                     if text:
                         file_contents.append(f"Content of file {os.path.basename(file_path)}:\n{text}")
+                        file_ids.append(os.path.basename(file_path))
                 except Exception as e:
                     logger.error(f"Error extracting text from file: {e}")
                     return {
@@ -95,8 +169,89 @@ class OrchestratorAgent:
         if file_contents:
             message = message + "\n\n" + "\n\n".join(file_contents)
             
-        # Process with the appropriate provider
+        # Convert history to LangChain format
+        chat_history = []
+        if history:
+            for msg in history:
+                if msg["role"] == "user":
+                    chat_history.append(HumanMessage(content=msg["content"]))
+                elif msg["role"] == "assistant":
+                    chat_history.append(AIMessage(content=msg["content"]))
+                    
+        # Create memory
+        memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True,
+            input_key="input"
+        )
+        
+        # Add history to memory
+        if chat_history:
+            memory.chat_memory.messages.extend(chat_history)
+            
+        # Create LLM
         try:
+            llm = self._get_llm(provider, api_key)
+            
+            # Create agent executor with tools
+            agent_executor = self._create_agent_executor(
+                llm=llm,
+                tools=self.tools,
+                memory=memory,
+                system_message="""You are NeuroNest AI, an advanced AI assistant that helps users with various tasks.
+You have access to tools that can help you complete tasks such as reading and writing files,
+executing code, creating projects, and more. Always use the appropriate tool when needed.
+If you don't know how to do something or if a tool is not available, be honest and say so.
+
+When generating code, make sure it's well-structured, follows best practices, and is properly documented.
+When creating projects, organize files in a logical structure and include necessary configuration files.
+"""
+            )
+            
+            # Add file information to the context
+            input_context = {}
+            if context:
+                input_context.update(context)
+            if file_ids:
+                input_context["file_ids"] = file_ids
+            if user_id:
+                input_context["user_id"] = user_id
+                
+            # Execute the agent
+            result = await agent_executor.ainvoke(
+                {
+                    "input": message,
+                    "context": json.dumps(input_context)
+                }
+            )
+            
+            # Extract thoughts from intermediate steps
+            thoughts = []
+            for step in result.get("intermediate_steps", []):
+                action = step[0]
+                action_input = action.tool_input if hasattr(action, "tool_input") else action.args
+                action_output = step[1]
+                
+                thoughts.append(
+                    AgentThought(
+                        thought=f"I need to use the {action.tool} tool",
+                        action=action.tool,
+                        action_input=str(action_input),
+                        observation=str(action_output)
+                    )
+                )
+                
+            return {
+                "content": result["output"],
+                "type": "text",
+                "thoughts": thoughts
+            }
+                
+        # Process with the appropriate provider if agent execution fails
+        except Exception as e:
+            logger.error(f"Error executing agent: {e}")
+            logger.info("Falling back to direct provider API")
+            
             if provider == "gemini":
                 return await self._process_with_gemini(message, history, api_key)
             elif provider == "openai":
@@ -434,12 +589,20 @@ async def generate_code(
     user_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Generate code based on requirements
+    Generate code based on requirements using the specialized CodeGenerationAgent
     """
-    return await code_generation_agent.generate_code(
+    from app.services.specialized_agents import CodeGenerationAgent
+    
+    # Create code generation agent
+    code_agent = CodeGenerationAgent()
+    
+    # Generate code
+    result = await code_agent.generate_code(
         requirements=requirements,
         language=language,
         framework=framework,
         api_keys=api_keys,
         user_id=user_id
     )
+    
+    return result

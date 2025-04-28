@@ -5,22 +5,19 @@ import json
 import asyncio
 import tempfile
 import shutil
-import docker
-from typing import Dict, List, Any, Optional, Tuple
+import time
+from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
 from app.core.config import settings
 from app.models.execution import ExecutionRequest, ExecutionResponse, RuntimeEnvironment
+from app.services.docker_service import (
+    execute_code_in_container,
+    get_container_logs,
+    stop_container,
+    cleanup_containers
+)
 
 logger = logging.getLogger(__name__)
-
-# Initialize Docker client if code execution is enabled
-docker_client = None
-if settings.ENABLE_CODE_EXECUTION:
-    try:
-        docker_client = docker.from_env()
-        logger.info("Docker client initialized successfully")
-    except Exception as e:
-        logger.error(f"Error initializing Docker client: {e}")
 
 # Available runtime environments
 RUNTIME_ENVIRONMENTS = [
@@ -52,6 +49,26 @@ RUNTIME_ENVIRONMENTS = [
         version="latest",
         image="nginx:alpine",
         file_extensions=[".html", ".css", ".js"]
+    ),
+    RuntimeEnvironment(
+        id="java",
+        name="Java",
+        description="Java 17 runtime environment",
+        language="java",
+        version="17",
+        image="openjdk:17-slim",
+        default_command="java",
+        file_extensions=[".java", ".jar"]
+    ),
+    RuntimeEnvironment(
+        id="go",
+        name="Go",
+        description="Go 1.20 runtime environment",
+        language="go",
+        version="1.20",
+        image="golang:1.20-alpine",
+        default_command="go run",
+        file_extensions=[".go"]
     )
 ]
 
@@ -72,27 +89,20 @@ def get_runtime_environment(runtime_id: str) -> Optional[RuntimeEnvironment]:
 
 async def execute_code(
     project_id: str,
+    runtime_id: Optional[str] = None,
     command: Optional[str] = None,
-    timeout: int = 30,
-    runtime_id: Optional[str] = None
+    timeout: int = 60
 ) -> ExecutionResponse:
     """
-    Execute code in a Docker container
+    Execute code in a Docker container for a project
     """
+    execution_id = str(uuid.uuid4())
+    
     if not settings.ENABLE_CODE_EXECUTION:
         return ExecutionResponse(
-            execution_id=str(uuid.uuid4()),
+            execution_id=execution_id,
             status="failed",
             error="Code execution is disabled",
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow()
-        )
-    
-    if not docker_client:
-        return ExecutionResponse(
-            execution_id=str(uuid.uuid4()),
-            status="failed",
-            error="Docker client is not initialized",
             start_time=datetime.utcnow(),
             end_time=datetime.utcnow()
         )
@@ -103,7 +113,7 @@ async def execute_code(
     # Check if project exists
     if not os.path.exists(project_dir):
         return ExecutionResponse(
-            execution_id=str(uuid.uuid4()),
+            execution_id=execution_id,
             status="failed",
             error="Project not found",
             start_time=datetime.utcnow(),
@@ -116,7 +126,7 @@ async def execute_code(
             metadata = json.loads(f.read())
     except Exception as e:
         return ExecutionResponse(
-            execution_id=str(uuid.uuid4()),
+            execution_id=execution_id,
             status="failed",
             error=f"Error reading project metadata: {str(e)}",
             start_time=datetime.utcnow(),
@@ -138,75 +148,52 @@ async def execute_code(
     else:
         # Default to Python if no language is specified
         runtime = get_runtime_environment("python")
-    
+        
     if not runtime:
         return ExecutionResponse(
-            execution_id=str(uuid.uuid4()),
+            execution_id=execution_id,
             status="failed",
             error=f"Runtime environment not found: {runtime_id}",
             start_time=datetime.utcnow(),
             end_time=datetime.utcnow()
         )
     
-    # Generate execution ID
-    execution_id = str(uuid.uuid4())
-    
     # Start time
     start_time = datetime.utcnow()
     
     try:
-        # Create a container
-        container = docker_client.containers.run(
+        # Set up volumes
+        volumes = {
+            project_dir: {'bind': '/app', 'mode': 'ro'}
+        }
+        
+        # Set up environment variables
+        environment = {
+            "PROJECT_ID": project_id,
+            "RUNTIME_ID": runtime.id
+        }
+        
+        # Create and start container using docker_service
+        result = await asyncio.to_thread(
+            execute_code_in_container,
+            code="",  # No code, we're executing a project
+            language=runtime.language,
+            timeout=timeout,
+            environment=environment,
+            project_dir=project_dir,
             image=runtime.image,
             command=command or runtime.default_command,
-            volumes={project_dir: {'bind': '/app', 'mode': 'ro'}},
-            working_dir='/app',
-            network_mode=settings.DOCKER_NETWORK,
-            mem_limit=settings.DOCKER_MEMORY_LIMIT,
-            detach=True,
-            remove=True,
-            stdout=True,
-            stderr=True
+            volumes=volumes
         )
         
-        # Wait for container to finish or timeout
-        try:
-            container_logs = container.logs(stream=True)
-            output = ""
-            
-            # Read logs with timeout
-            async def read_logs():
-                nonlocal output
-                for line in container_logs:
-                    output += line.decode('utf-8')
-            
-            # Run with timeout
-            try:
-                await asyncio.wait_for(read_logs(), timeout=timeout)
-                status = "success"
-                error = None
-            except asyncio.TimeoutError:
-                status = "timeout"
-                error = f"Execution timed out after {timeout} seconds"
-                try:
-                    container.kill()
-                except:
-                    pass
-        except Exception as e:
-            status = "failed"
-            error = f"Error reading container logs: {str(e)}"
-            output = ""
-        
-        # End time
-        end_time = datetime.utcnow()
-        
+        # Convert result to ExecutionResponse
         return ExecutionResponse(
-            execution_id=execution_id,
-            status=status,
-            output=output,
-            error=error,
-            start_time=start_time,
-            end_time=end_time
+            execution_id=result.get("execution_id", execution_id),
+            status=result.get("status", "failed"),
+            output=result.get("output", ""),
+            error=result.get("error"),
+            start_time=result.get("start_time", start_time),
+            end_time=result.get("end_time", datetime.utcnow())
         )
     except Exception as e:
         logger.error(f"Error executing code: {e}")
@@ -218,16 +205,129 @@ async def execute_code(
             end_time=datetime.utcnow()
         )
 
+async def execute_single_file(
+    file_path: str,
+    language: str = "python",
+    timeout: int = 60
+) -> ExecutionResponse:
+    """
+    Execute a single file in a Docker container
+    """
+    execution_id = str(uuid.uuid4())
+    
+    if not settings.ENABLE_CODE_EXECUTION:
+        return ExecutionResponse(
+            execution_id=execution_id,
+            status="failed",
+            error="Code execution is disabled",
+            start_time=datetime.utcnow(),
+            end_time=datetime.utcnow()
+        )
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        return ExecutionResponse(
+            execution_id=execution_id,
+            status="failed",
+            error="File not found",
+            start_time=datetime.utcnow(),
+            end_time=datetime.utcnow()
+        )
+    
+    # Start time
+    start_time = datetime.utcnow()
+    
+    try:
+        # Read file content
+        with open(file_path, 'r') as f:
+            code = f.read()
+        
+        # Execute code using docker_service
+        result = await asyncio.to_thread(
+            execute_code_in_container,
+            code=code,
+            language=language,
+            timeout=timeout
+        )
+        
+        # Convert result to ExecutionResponse
+        return ExecutionResponse(
+            execution_id=result.get("execution_id", execution_id),
+            status=result.get("status", "failed"),
+            output=result.get("output", ""),
+            error=result.get("error"),
+            start_time=result.get("start_time", start_time),
+            end_time=result.get("end_time", datetime.utcnow())
+        )
+    except Exception as e:
+        logger.error(f"Error executing file: {e}")
+        return ExecutionResponse(
+            execution_id=execution_id,
+            status="failed",
+            error=f"Error executing file: {str(e)}",
+            start_time=start_time,
+            end_time=datetime.utcnow()
+        )
+
+async def execute_code_snippet(
+    code: str,
+    language: str = "python",
+    timeout: int = 60
+) -> ExecutionResponse:
+    """
+    Execute a code snippet in a Docker container
+    """
+    execution_id = str(uuid.uuid4())
+    
+    if not settings.ENABLE_CODE_EXECUTION:
+        return ExecutionResponse(
+            execution_id=execution_id,
+            status="failed",
+            error="Code execution is disabled",
+            start_time=datetime.utcnow(),
+            end_time=datetime.utcnow()
+        )
+    
+    # Start time
+    start_time = datetime.utcnow()
+    
+    try:
+        # Execute code using docker_service
+        result = await asyncio.to_thread(
+            execute_code_in_container,
+            code=code,
+            language=language,
+            timeout=timeout
+        )
+        
+        # Convert result to ExecutionResponse
+        return ExecutionResponse(
+            execution_id=result.get("execution_id", execution_id),
+            status=result.get("status", "failed"),
+            output=result.get("output", ""),
+            error=result.get("error"),
+            start_time=result.get("start_time", start_time),
+            end_time=result.get("end_time", datetime.utcnow())
+        )
+    except Exception as e:
+        logger.error(f"Error executing code snippet: {e}")
+        return ExecutionResponse(
+            execution_id=execution_id,
+            status="failed",
+            error=f"Error executing code snippet: {str(e)}",
+            start_time=start_time,
+            end_time=datetime.utcnow()
+        )
+
 async def stop_execution(container_id: str) -> bool:
     """
     Stop a running container
     """
-    if not settings.ENABLE_CODE_EXECUTION or not docker_client:
+    if not settings.ENABLE_CODE_EXECUTION:
         return False
     
     try:
-        container = docker_client.containers.get(container_id)
-        container.kill()
+        await asyncio.to_thread(stop_container, container_id)
         return True
     except Exception as e:
         logger.error(f"Error stopping container: {e}")
@@ -237,13 +337,23 @@ async def get_execution_logs(container_id: str) -> Optional[str]:
     """
     Get logs from a container
     """
-    if not settings.ENABLE_CODE_EXECUTION or not docker_client:
+    if not settings.ENABLE_CODE_EXECUTION:
         return None
     
     try:
-        container = docker_client.containers.get(container_id)
-        logs = container.logs().decode('utf-8')
+        logs = await asyncio.to_thread(get_container_logs, container_id)
         return logs
     except Exception as e:
         logger.error(f"Error getting container logs: {e}")
         return None
+
+def cleanup_all_containers():
+    """
+    Clean up all active containers
+    """
+    if settings.ENABLE_CODE_EXECUTION:
+        try:
+            cleanup_containers()
+            logger.info("All containers cleaned up")
+        except Exception as e:
+            logger.error(f"Error cleaning up containers: {e}")

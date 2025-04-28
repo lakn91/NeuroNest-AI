@@ -5,6 +5,7 @@ from app.core.dependencies import get_current_user, get_api_key
 from app.models.agent import AgentRequest, AgentResponse, AgentListResponse, ProviderListResponse
 from app.services.agent_service import process_message, get_available_agents, get_available_providers, generate_code
 from app.services.file_service import save_upload_file
+from app.services.specialized_agents import DebuggingAgent, ProjectPlanningAgent
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -97,3 +98,53 @@ async def upload_file_for_agent(
     except Exception as e:
         logger.error(f"Error uploading file: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+
+@router.post("/debug-code")
+async def debug_code_endpoint(
+    code: str = Form(...),
+    error_message: Optional[str] = Form(None),
+    language: str = Form("python"),
+    user: Optional[Dict[str, Any]] = Depends(get_current_user),
+    api_keys: Dict[str, str] = Depends(get_api_key)
+):
+    """
+    Debug code and fix issues
+    """
+    try:
+        debugging_agent = DebuggingAgent()
+        response = await debugging_agent.debug_code(
+            code=code,
+            error_message=error_message,
+            language=language,
+            api_keys=api_keys,
+            user_id=user["uid"] if user else None
+        )
+        return response
+    except Exception as e:
+        logger.error(f"Error debugging code: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to debug code: {str(e)}")
+
+@router.post("/plan-project")
+async def plan_project_endpoint(
+    requirements: str = Form(...),
+    project_type: str = Form("web"),
+    technologies: List[str] = Form(...),
+    user: Optional[Dict[str, Any]] = Depends(get_current_user),
+    api_keys: Dict[str, str] = Depends(get_api_key)
+):
+    """
+    Plan a software project
+    """
+    try:
+        planning_agent = ProjectPlanningAgent()
+        response = await planning_agent.plan_project(
+            requirements=requirements,
+            project_type=project_type,
+            technologies=technologies,
+            api_keys=api_keys,
+            user_id=user["uid"] if user else None
+        )
+        return response
+    except Exception as e:
+        logger.error(f"Error planning project: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to plan project: {str(e)}")

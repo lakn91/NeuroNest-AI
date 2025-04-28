@@ -27,13 +27,16 @@ class Settings(BaseModel):
     DEFAULT_AI_PROVIDER: str = os.getenv("DEFAULT_AI_PROVIDER", "gemini")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
+    ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
     
     # Docker settings
-    ENABLE_CODE_EXECUTION: bool = os.getenv("ENABLE_CODE_EXECUTION", "false").lower() == "true"
+    ENABLE_CODE_EXECUTION: bool = os.getenv("ENABLE_CODE_EXECUTION", "true").lower() == "true"
     DOCKER_BASE_IMAGE: str = os.getenv("DOCKER_BASE_IMAGE", "python:3.10-slim")
-    DOCKER_NETWORK: str = os.getenv("DOCKER_NETWORK", "none")
-    DOCKER_TIMEOUT: int = int(os.getenv("DOCKER_TIMEOUT", "30"))
-    DOCKER_MEMORY_LIMIT: str = os.getenv("DOCKER_MEMORY_LIMIT", "512m")
+    DOCKER_NETWORK: str = os.getenv("DOCKER_NETWORK", "bridge")
+    DOCKER_TIMEOUT: int = int(os.getenv("DOCKER_TIMEOUT", "60"))
+    DOCKER_MEMORY_LIMIT: str = os.getenv("DOCKER_MEMORY_LIMIT", "1g")
+    DOCKER_CPU_LIMIT: float = float(os.getenv("DOCKER_CPU_LIMIT", "1.0"))
+    DOCKER_CONTAINER_PREFIX: str = os.getenv("DOCKER_CONTAINER_PREFIX", "neuronest-")
     
     # File storage settings
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./static/uploads")

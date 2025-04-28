@@ -79,5 +79,33 @@ class AgentMemory(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     
 class AgentThought(BaseModel):
-    content: str
+    thought: str
+    action: Optional[str] = None
+    action_input: Optional[str] = None
+    observation: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    
+class AgentTool(BaseModel):
+    name: str
+    description: str
+    parameters: Dict[str, Any]
+    
+class AgentType(BaseModel):
+    id: str
+    name: str
+    description: str
+    capabilities: List[str]
+    tools: List[AgentTool] = []
+    
+class AgentExecutionResult(BaseModel):
+    output: str
+    thoughts: List[AgentThought] = []
+    tool_calls: List[ToolCall] = []
+    execution_time: float
+    
+class AgentExecutionRequest(BaseModel):
+    agent_type: str
+    input: str
+    context: Optional[Dict[str, Any]] = None
+    tools: Optional[List[str]] = None
+    memory_key: Optional[str] = None
