@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useDatabase } from './DatabaseContext';
+import api from '../services/api';
 
 // Create the conversation context
 const ConversationContext = createContext();
@@ -37,23 +38,49 @@ export const ConversationProvider = ({ children }) => {
    * @param {Object} conversationData - Conversation data
    * @returns {Promise} Promise with conversation ID
    */
-  const createConversation = async (conversationData) => {
+  const createConversation = async (conversationData = {}) => {
     if (!currentUser) return { id: null, error: 'No user logged in' };
     
-    const result = await conversationService.createConversation(currentUser.uid, conversationData);
-    
-    if (!result.error) {
-      // Fetch the new conversation to add to the conversations list
-      const { data } = await conversationService.getConversation(result.id);
+    // Try to use the database service first
+    if (conversationService && conversationService.createConversation) {
+      const result = await conversationService.createConversation(currentUser.uid, conversationData);
       
-      if (data) {
-        setConversations(prev => [data, ...prev]);
-        setCurrentConversation(data);
-        setMessages(data.messages || []);
+      if (!result.error) {
+        // Fetch the new conversation to add to the conversations list
+        const { data } = await conversationService.getConversation(result.id);
+        
+        if (data) {
+          setConversations(prev => [data, ...prev]);
+          setCurrentConversation(data);
+          setMessages(data.messages || []);
+        }
       }
+      
+      return result;
     }
     
-    return result;
+    // Fallback to API if database service is not available
+    try {
+      const response = await api.post('/api/conversation', {
+        title: conversationData.title || 'New Conversation',
+        context: conversationData.context || null,
+        metadata: conversationData.metadata || null
+      });
+      
+      const newConversation = response.data;
+      
+      // Add new conversation to state
+      setConversations(prev => [newConversation, ...prev]);
+      
+      // Set as current conversation
+      setCurrentConversation(newConversation);
+      setMessages([]);
+      
+      return { id: newConversation.id, data: newConversation, error: null };
+    } catch (err) {
+      console.error('Failed to create conversation:', err);
+      return { id: null, data: null, error: err.response?.data?.detail || 'Failed to create conversation' };
+    }
   };
 
   /**
@@ -62,14 +89,38 @@ export const ConversationProvider = ({ children }) => {
    * @returns {Promise} Promise with conversation data
    */
   const getConversation = async (conversationId) => {
-    const result = await conversationService.getConversation(conversationId);
-    
-    if (!result.error && result.data) {
-      setCurrentConversation(result.data);
-      setMessages(result.data.messages || []);
+    // Try to use the database service first
+    if (conversationService && conversationService.getConversation) {
+      const result = await conversationService.getConversation(conversationId);
+      
+      if (!result.error && result.data) {
+        setCurrentConversation(result.data);
+        setMessages(result.data.messages || []);
+      }
+      
+      return result;
     }
     
-    return result;
+    // Fallback to API if database service is not available
+    try {
+      const response = await api.get(`/api/conversation/${conversationId}`);
+      
+      setCurrentConversation(response.data);
+      
+      // Get messages for this conversation
+      try {
+        const messagesResponse = await api.get(`/api/conversation/${conversationId}/messages`);
+        setMessages(messagesResponse.data.messages);
+      } catch (err) {
+        console.error('Failed to get messages:', err);
+        setMessages([]);
+      }
+      
+      return { data: response.data, error: null };
+    } catch (err) {
+      console.error('Failed to get conversation:', err);
+      return { data: null, error: err.response?.data?.detail || 'Failed to get conversation' };
+    }
   };
 
   /**
@@ -80,14 +131,32 @@ export const ConversationProvider = ({ children }) => {
     if (!currentUser) return { data: [], error: 'No user logged in' };
     
     setLoading(true);
-    const result = await conversationService.getUserConversations(currentUser.uid);
     
-    if (!result.error) {
-      setConversations(result.data);
+    // Try to use the database service first
+    if (conversationService && conversationService.getUserConversations) {
+      const result = await conversationService.getUserConversations(currentUser.uid);
+      
+      if (!result.error) {
+        setConversations(result.data);
+      }
+      
+      setLoading(false);
+      return result;
     }
     
-    setLoading(false);
-    return result;
+    // Fallback to API if database service is not available
+    try {
+      const response = await api.get('/api/conversation');
+      
+      setConversations(response.data.conversations);
+      setLoading(false);
+      
+      return { data: response.data.conversations, error: null };
+    } catch (err) {
+      console.error('Failed to get conversations:', err);
+      setLoading(false);
+      return { data: [], error: err.response?.data?.detail || 'Failed to get conversations' };
+    }
   };
 
   /**
@@ -98,11 +167,25 @@ export const ConversationProvider = ({ children }) => {
   const addMessage = async (message) => {
     if (!currentConversation) return { error: 'No active conversation' };
     
-    const result = await conversationService.addMessage(currentConversation.id, message);
+    // Try to use the database service first
+    if (conversationService && conversationService.addMessage) {
+      const result = await conversationService.addMessage(currentConversation.id, message);
+      // We don't need to update the messages state here because the real-time listener will do it
+      return result;
+    }
     
-    // We don't need to update the messages state here because the real-time listener will do it
-    
-    return result;
+    // Fallback to API if database service is not available
+    try {
+      const response = await api.post(`/api/conversation/${currentConversation.id}/messages`, message);
+      
+      // Add new message to state
+      setMessages(prev => [...prev, response.data]);
+      
+      return { data: response.data, error: null };
+    } catch (err) {
+      console.error('Failed to add message:', err);
+      return { data: null, error: err.response?.data?.detail || 'Failed to add message' };
+    }
   };
 
   /**
@@ -112,25 +195,50 @@ export const ConversationProvider = ({ children }) => {
    * @returns {Promise} Promise that resolves when metadata is updated
    */
   const updateConversationMetadata = async (conversationId, metadata) => {
-    const result = await conversationService.updateConversationMetadata(conversationId, metadata);
+    // Try to use the database service first
+    if (conversationService && conversationService.updateConversationMetadata) {
+      const result = await conversationService.updateConversationMetadata(conversationId, metadata);
+      
+      if (!result.error) {
+        // Update the conversation in the conversations list
+        setConversations(prev => 
+          prev.map(conversation => 
+            conversation.id === conversationId 
+              ? { ...conversation, ...metadata, updatedAt: new Date().toISOString() } 
+              : conversation
+          )
+        );
+        
+        // Update current conversation if it's the one being updated
+        if (currentConversation && currentConversation.id === conversationId) {
+          setCurrentConversation(prev => ({ ...prev, ...metadata, updatedAt: new Date().toISOString() }));
+        }
+      }
+      
+      return result;
+    }
     
-    if (!result.error) {
-      // Update the conversation in the conversations list
+    // Fallback to API if database service is not available
+    try {
+      const response = await api.put(`/api/conversation/${conversationId}`, metadata);
+      
+      // Update conversation in state
       setConversations(prev => 
         prev.map(conversation => 
-          conversation.id === conversationId 
-            ? { ...conversation, ...metadata, updatedAt: new Date().toISOString() } 
-            : conversation
+          conversation.id === conversationId ? response.data : conversation
         )
       );
       
       // Update current conversation if it's the one being updated
       if (currentConversation && currentConversation.id === conversationId) {
-        setCurrentConversation(prev => ({ ...prev, ...metadata, updatedAt: new Date().toISOString() }));
+        setCurrentConversation(response.data);
       }
+      
+      return { data: response.data, error: null };
+    } catch (err) {
+      console.error('Failed to update conversation:', err);
+      return { data: null, error: err.response?.data?.detail || 'Failed to update conversation' };
     }
-    
-    return result;
   };
 
   /**
@@ -139,10 +247,29 @@ export const ConversationProvider = ({ children }) => {
    * @returns {Promise} Promise that resolves when conversation is deleted
    */
   const deleteConversation = async (conversationId) => {
-    const result = await conversationService.deleteConversation(conversationId);
+    // Try to use the database service first
+    if (conversationService && conversationService.deleteConversation) {
+      const result = await conversationService.deleteConversation(conversationId);
+      
+      if (!result.error) {
+        // Remove the conversation from the conversations list
+        setConversations(prev => prev.filter(conversation => conversation.id !== conversationId));
+        
+        // Clear current conversation if it's the one being deleted
+        if (currentConversation && currentConversation.id === conversationId) {
+          setCurrentConversation(null);
+          setMessages([]);
+        }
+      }
+      
+      return result;
+    }
     
-    if (!result.error) {
-      // Remove the conversation from the conversations list
+    // Fallback to API if database service is not available
+    try {
+      await api.delete(`/api/conversation/${conversationId}`);
+      
+      // Remove conversation from state
       setConversations(prev => prev.filter(conversation => conversation.id !== conversationId));
       
       // Clear current conversation if it's the one being deleted
@@ -150,9 +277,12 @@ export const ConversationProvider = ({ children }) => {
         setCurrentConversation(null);
         setMessages([]);
       }
+      
+      return { error: null };
+    } catch (err) {
+      console.error('Failed to delete conversation:', err);
+      return { error: err.response?.data?.detail || 'Failed to delete conversation' };
     }
-    
-    return result;
   };
 
   /**
@@ -168,31 +298,56 @@ export const ConversationProvider = ({ children }) => {
     
     if (typeof conversation === 'string') {
       // If conversation is an ID, fetch the conversation data
-      const { data } = await conversationService.getConversation(conversation);
-      
-      if (data) {
-        setCurrentConversation(data);
-        setMessages(data.messages || []);
+      if (conversationService && conversationService.getConversation) {
+        const { data } = await conversationService.getConversation(conversation);
         
-        // Subscribe to real-time updates
-        const unsub = conversationService.onConversationChanged(conversation, (updatedConversation) => {
+        if (data) {
+          setCurrentConversation(data);
+          setMessages(data.messages || []);
+          
+          // Subscribe to real-time updates if available
+          if (conversationService.onConversationChanged) {
+            const unsub = conversationService.onConversationChanged(conversation, (updatedConversation) => {
+              setCurrentConversation(updatedConversation);
+              setMessages(updatedConversation.messages || []);
+            });
+            
+            setUnsubscribe(() => unsub);
+          }
+        }
+      } else {
+        // Use API if database service is not available
+        try {
+          const response = await api.get(`/api/conversation/${conversation}`);
+          setCurrentConversation(response.data);
+          
+          // Get messages for this conversation
+          try {
+            const messagesResponse = await api.get(`/api/conversation/${conversation}/messages`);
+            setMessages(messagesResponse.data.messages);
+          } catch (err) {
+            console.error('Failed to get messages:', err);
+            setMessages([]);
+          }
+        } catch (err) {
+          console.error('Failed to get conversation:', err);
+          setCurrentConversation(null);
+          setMessages([]);
+        }
+      }
+    } else if (conversation) {
+      setCurrentConversation(conversation);
+      setMessages(conversation.messages || []);
+      
+      // Subscribe to real-time updates if available
+      if (conversationService && conversationService.onConversationChanged) {
+        const unsub = conversationService.onConversationChanged(conversation.id, (updatedConversation) => {
           setCurrentConversation(updatedConversation);
           setMessages(updatedConversation.messages || []);
         });
         
         setUnsubscribe(() => unsub);
       }
-    } else if (conversation) {
-      setCurrentConversation(conversation);
-      setMessages(conversation.messages || []);
-      
-      // Subscribe to real-time updates
-      const unsub = conversationService.onConversationChanged(conversation.id, (updatedConversation) => {
-        setCurrentConversation(updatedConversation);
-        setMessages(updatedConversation.messages || []);
-      });
-      
-      setUnsubscribe(() => unsub);
     } else {
       setCurrentConversation(null);
       setMessages([]);

@@ -4,8 +4,9 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
+import { useNavigate } from 'react-router-dom';
 import { useDatabase } from './DatabaseContext';
+import api from '../services/api';
 
 // Create the authentication context
 const AuthContext = createContext();
@@ -27,7 +28,8 @@ export const AuthProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [userSettings, setUserSettings] = useState(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
   
   // Get database services from context
   const { 
@@ -43,7 +45,47 @@ export const AuthProvider = ({ children }) => {
    * @returns {Promise} Promise with user credentials
    */
   const login = async (email, password) => {
-    return authService.signInWithEmail(email, password);
+    setError(null);
+    
+    // Try to use the database service first
+    if (authService && authService.signInWithEmail) {
+      try {
+        const result = await authService.signInWithEmail(email, password);
+        if (!result.error) {
+          navigate('/dashboard');
+        } else {
+          setError(result.error);
+        }
+        return result;
+      } catch (err) {
+        setError(err.message || 'Login failed');
+        return { error: err.message || 'Login failed' };
+      }
+    }
+    
+    // Fallback to API if database service is not available
+    try {
+      setLoading(true);
+      
+      const response = await api.post('/api/auth/login', { email, password });
+      const { access_token, user } = response.data;
+      
+      // Save token and set auth header
+      localStorage.setItem('token', access_token);
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      
+      setCurrentUser(user);
+      setUserProfile(user);
+      navigate('/dashboard');
+      
+      return { data: user, error: null };
+    } catch (err) {
+      console.error('Login failed:', err);
+      setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
+      return { error: err.response?.data?.detail || 'Login failed. Please check your credentials.' };
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
@@ -62,7 +104,52 @@ export const AuthProvider = ({ children }) => {
    * @returns {Promise} Promise with user credentials
    */
   const signup = async (email, password, displayName = null) => {
-    return authService.createUser(email, password, displayName);
+    setError(null);
+    
+    // Try to use the database service first
+    if (authService && authService.createUser) {
+      try {
+        const result = await authService.createUser(email, password, displayName);
+        if (!result.error) {
+          navigate('/dashboard');
+        } else {
+          setError(result.error);
+        }
+        return result;
+      } catch (err) {
+        setError(err.message || 'Registration failed');
+        return { error: err.message || 'Registration failed' };
+      }
+    }
+    
+    // Fallback to API if database service is not available
+    try {
+      setLoading(true);
+      
+      const response = await api.post('/api/auth/register', {
+        email,
+        password,
+        display_name: displayName || email.split('@')[0]
+      });
+      
+      const { access_token, user } = response.data;
+      
+      // Save token and set auth header
+      localStorage.setItem('token', access_token);
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      
+      setCurrentUser(user);
+      setUserProfile(user);
+      navigate('/dashboard');
+      
+      return { data: user, error: null };
+    } catch (err) {
+      console.error('Registration failed:', err);
+      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+      return { error: err.response?.data?.detail || 'Registration failed. Please try again.' };
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
@@ -70,11 +157,60 @@ export const AuthProvider = ({ children }) => {
    * @returns {Promise} Promise that resolves when sign out is complete
    */
   const logout = async () => {
-    const result = await authService.signOut();
-    if (!result.error) {
-      router.push('/login');
+    setError(null);
+    
+    // Try to use the database service first
+    if (authService && authService.signOut) {
+      try {
+        const result = await authService.signOut();
+        if (!result.error) {
+          navigate('/login');
+        } else {
+          setError(result.error);
+        }
+        return result;
+      } catch (err) {
+        setError(err.message || 'Logout failed');
+        return { error: err.message || 'Logout failed' };
+      }
     }
-    return result;
+    
+    // Fallback to API if database service is not available
+    try {
+      setLoading(true);
+      
+      // Call logout endpoint if available
+      try {
+        await api.post('/api/auth/logout');
+      } catch (err) {
+        console.warn('Logout endpoint failed:', err);
+        // Continue with local logout even if API call fails
+      }
+      
+      // Clear token and auth header
+      localStorage.removeItem('token');
+      api.defaults.headers.common['Authorization'] = '';
+      
+      setCurrentUser(null);
+      setUserProfile(null);
+      setUserSettings(null);
+      navigate('/login');
+      
+      return { error: null };
+    } catch (err) {
+      console.error('Logout failed:', err);
+      // Still clear local auth state even if API call fails
+      localStorage.removeItem('token');
+      api.defaults.headers.common['Authorization'] = '';
+      setCurrentUser(null);
+      setUserProfile(null);
+      setUserSettings(null);
+      navigate('/login');
+      
+      return { error: null };
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
@@ -209,11 +345,56 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, [authService, userService, provider]);
 
+  // Clear error
+  const clearError = () => {
+    setError(null);
+  };
+
+  // Check if user is already logged in on mount
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        
+        if (token) {
+          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          
+          // Fetch current user data
+          const response = await api.get('/api/auth/me');
+          setCurrentUser(response.data);
+          setUserProfile(response.data);
+          
+          // Fetch user settings if available
+          try {
+            const settingsResponse = await api.get('/api/settings');
+            setUserSettings(settingsResponse.data);
+          } catch (err) {
+            console.warn('Failed to fetch user settings:', err);
+          }
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
+        // Clear invalid token
+        localStorage.removeItem('token');
+        api.defaults.headers.common['Authorization'] = '';
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Only run if we're using the API authentication
+    if (!authService) {
+      checkAuthStatus();
+    }
+  }, []);
+
   // Value to be provided by the context
   const value = {
     currentUser,
     userProfile,
     userSettings,
+    loading,
+    error,
     login,
     loginWithGoogle,
     signup,
@@ -224,7 +405,9 @@ export const AuthProvider = ({ children }) => {
     updateSettings,
     getSettings,
     updateApiKeys,
-    getApiKeys
+    getApiKeys,
+    clearError,
+    isAuthenticated: !!currentUser
   };
 
   return (

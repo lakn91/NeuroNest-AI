@@ -812,7 +812,7 @@ export const conversationService = {
 /**
  * Agent Memory service for managing agent memory
  */
-export const agentMemoryService = {
+export const memoryService = {
   /**
    * Create a new memory entry
    * @param {string} userId - User ID
@@ -1089,6 +1089,7 @@ export default {
   userService,
   projectService,
   conversationService,
-  agentMemoryService,
+  memoryService,
+  agentMemoryService: memoryService, // Keep for backward compatibility
   storageService
 };
