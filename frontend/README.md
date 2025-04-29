@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NeuroNest-AI Frontend
 
-## Getting Started
+## Overview
 
-First, run the development server:
+This directory contains the frontend for the NeuroNest-AI project. It's built using React/Next.js and provides an interactive and user-friendly interface.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Structure
+
+```
+frontend/
+├── public/            # Public files and static assets
+├── src/               # Source code
+│   ├── components/    # Reusable React components
+│   ├── contexts/      # React contexts for global state
+│   ├── hooks/         # Custom React hooks
+│   ├── pages/         # Next.js pages
+│   ├── services/      # Services for interacting with the backend
+│   ├── styles/        # Global CSS styles
+│   └── utils/         # Helper functions
+├── .env.example       # Example environment file
+├── next.config.js     # Next.js configuration
+├── package.json       # Project dependencies
+└── tailwind.config.js # Tailwind CSS configuration
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Main Components
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Contexts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **AuthContext**: Manages authentication and user state.
+- **DatabaseContext**: Provides a unified interface for interacting with Firebase or Supabase.
+- **ProjectContext**: Manages projects and their files.
+- **ConversationContext**: Manages conversations with agents.
+- **AgentContext**: Manages agents and their interactions.
+- **AgentMemoryContext**: Manages agent memory.
+- **RuntimeContext**: Manages the code execution environment.
+- **SettingsContext**: Manages user settings.
 
-## Learn More
+### Services
 
-To learn more about Next.js, take a look at the following resources:
+- **firebaseService.js**: Provides an interface for interacting with Firebase.
+- **supabaseService.js**: Provides an interface for interacting with Supabase.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Components
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **auth/**: Authentication and user management components.
+- **agent/**: Agent components and interaction interface.
+- **editor/**: Code editor and editing components.
+- **input/**: Input components including microphone.
+- **runtime/**: Runtime environment and preview components.
+- **settings/**: Settings components including dialect selection.
 
-## Deploy on Vercel
+## Installation and Running
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2. Copy `.env.example` to `.env.local` and modify values as needed.
+
+3. Run the local server:
+   ```bash
+   npm run dev
+   ```
+
+4. Open your browser at: `http://localhost:3000`
+
+## Building for Production
+
+```bash
+npm run build
+npm start
+```
+
+## Testing
+
+```bash
+npm run test
+```
+
+## Documentation
+
+For more information about specific components and functions, see the comments in the code and README.md files in subdirectories.
+
+## Additional Resources
+
+- [Next.js Documentation](https://nextjs.org/docs) - Learn about Next.js features and API.
+- [React Documentation](https://reactjs.org/) - Learn more about React.
+- [Tailwind CSS](https://tailwindcss.com/) - CSS framework for styling.
+- [Firebase Documentation](https://firebase.google.com/docs) - Firebase documentation.
+- [Supabase Documentation](https://supabase.io/docs) - Supabase documentation.
