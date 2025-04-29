@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@langchain/openai": "^0.5.7",
+    "@supabase/supabase-js": "^2.39.7",
     "axios": "^1.9.0",
     "firebase": "^11.6.1",
     "langchain": "^0.3.24",
     "marked": "^15.0.11",
+    "monaco-editor": "^0.47.0",
     "next": "15.3.1",
     "prismjs": "^1.30.0",
     "react": "^19.0.0",
