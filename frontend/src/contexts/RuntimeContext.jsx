@@ -6,6 +6,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useProject } from './ProjectContext';
+import { useDatabase } from './DatabaseContext';
+import api from '../services/api';
 
 // Create the runtime context
 const RuntimeContext = createContext();
@@ -29,9 +31,11 @@ export const RuntimeProvider = ({ children }) => {
   const [runtimeLogs, setRuntimeLogs] = useState([]);
   const [runtimeOutput, setRuntimeOutput] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [runningProjects, setRunningProjects] = useState({});
   
   const { currentUser } = useAuth();
   const { currentProject } = useProject();
+  const { runtimeService } = useDatabase();
 
   /**
    * Create a new runtime environment
@@ -311,6 +315,222 @@ export const RuntimeProvider = ({ children }) => {
     }
   }, [currentUser]);
 
+  /**
+   * Run a project
+   * @param {string} projectId - Project ID
+   * @param {Object} config - Runtime configuration
+   * @returns {Promise} Promise with runtime information
+   */
+  const runProject = async (projectId, config = {}) => {
+    try {
+      // Try to use the database service first
+      if (runtimeService && runtimeService.runProject) {
+        const result = await runtimeService.runProject(projectId, config);
+        
+        if (!result.error) {
+          setRunningProjects(prev => ({
+            ...prev,
+            [projectId]: {
+              status: 'running',
+              config,
+              startTime: new Date(),
+              ...result.data
+            }
+          }));
+        }
+        
+        return result;
+      }
+      
+      // Fallback to starting a runtime
+      const runtimeResult = await createRuntime({
+        type: config.environment || 'web',
+        entryPoint: config.entryPoint,
+        args: config.args,
+        port: config.port
+      });
+      
+      if (runtimeResult.error) {
+        throw new Error(runtimeResult.error);
+      }
+      
+      const startResult = await startRuntime(runtimeResult.id);
+      
+      if (startResult.error) {
+        throw new Error(startResult.error);
+      }
+      
+      setRunningProjects(prev => ({
+        ...prev,
+        [projectId]: {
+          status: 'running',
+          config,
+          startTime: new Date(),
+          runtimeId: runtimeResult.id
+        }
+      }));
+      
+      return { data: { runtimeId: runtimeResult.id }, error: null };
+    } catch (err) {
+      console.error('Failed to run project:', err);
+      return { data: null, error: err.message || 'Failed to run project' };
+    }
+  };
+
+  /**
+   * Stop a running project
+   * @param {string} projectId - Project ID
+   * @returns {Promise} Promise with stop result
+   */
+  const stopProject = async (projectId) => {
+    try {
+      // Try to use the database service first
+      if (runtimeService && runtimeService.stopProject) {
+        const result = await runtimeService.stopProject(projectId);
+        
+        if (!result.error) {
+          setRunningProjects(prev => {
+            const newState = { ...prev };
+            if (newState[projectId]) {
+              newState[projectId].status = 'stopped';
+              newState[projectId].endTime = new Date();
+            }
+            return newState;
+          });
+        }
+        
+        return result;
+      }
+      
+      // Fallback to stopping a runtime
+      const projectRuntime = runningProjects[projectId];
+      
+      if (!projectRuntime || !projectRuntime.runtimeId) {
+        throw new Error('No runtime found for this project');
+      }
+      
+      const stopResult = await stopRuntime(projectRuntime.runtimeId);
+      
+      if (stopResult.error) {
+        throw new Error(stopResult.error);
+      }
+      
+      setRunningProjects(prev => {
+        const newState = { ...prev };
+        if (newState[projectId]) {
+          newState[projectId].status = 'stopped';
+          newState[projectId].endTime = new Date();
+        }
+        return newState;
+      });
+      
+      return { data: { stopped: true }, error: null };
+    } catch (err) {
+      console.error('Failed to stop project:', err);
+      return { data: null, error: err.message || 'Failed to stop project' };
+    }
+  };
+
+  /**
+   * Get project status
+   * @param {string} projectId - Project ID
+   * @returns {Promise<string>} Project status
+   */
+  const getProjectStatus = async (projectId) => {
+    // Check local state first
+    if (runningProjects[projectId]) {
+      return runningProjects[projectId].status;
+    }
+    
+    try {
+      // Try to use the database service first
+      if (runtimeService && runtimeService.getProjectStatus) {
+        const result = await runtimeService.getProjectStatus(projectId);
+        
+        if (!result.error && result.data) {
+          // Update local state
+          setRunningProjects(prev => ({
+            ...prev,
+            [projectId]: {
+              ...prev[projectId],
+              status: result.data.status,
+              ...result.data
+            }
+          }));
+          
+          return result.data.status;
+        }
+      }
+      
+      // Fallback to checking runtime status
+      const projectRuntimes = getProjectRuntimes().filter(r => r.projectId === projectId);
+      
+      if (projectRuntimes.length > 0) {
+        const latestRuntime = projectRuntimes.sort((a, b) => 
+          new Date(b.createdAt) - new Date(a.createdAt)
+        )[0];
+        
+        return latestRuntime.status;
+      }
+      
+      return 'unknown';
+    } catch (err) {
+      console.error('Failed to get project status:', err);
+      return 'unknown';
+    }
+  };
+
+  /**
+   * Get project output
+   * @param {string} projectId - Project ID
+   * @returns {Promise<string>} Project output
+   */
+  const getProjectOutput = async (projectId) => {
+    try {
+      // Try to use the database service first
+      if (runtimeService && runtimeService.getProjectOutput) {
+        const result = await runtimeService.getProjectOutput(projectId);
+        
+        if (!result.error) {
+          return result.data || '';
+        }
+      }
+      
+      // Fallback to runtime logs
+      return runtimeLogs
+        .filter(log => log.level !== 'error')
+        .map(log => log.message)
+        .join('\n');
+    } catch (err) {
+      console.error('Failed to get project output:', err);
+      return '';
+    }
+  };
+
+  /**
+   * Get project preview URL
+   * @param {string} projectId - Project ID
+   * @returns {Promise<string>} Preview URL
+   */
+  const getProjectPreviewUrl = async (projectId) => {
+    try {
+      // Try to use the database service first
+      if (runtimeService && runtimeService.getProjectPreviewUrl) {
+        const result = await runtimeService.getProjectPreviewUrl(projectId);
+        
+        if (!result.error) {
+          return result.data || '';
+        }
+      }
+      
+      // Fallback to current preview URL
+      return previewUrl || '';
+    } catch (err) {
+      console.error('Failed to get project preview URL:', err);
+      return '';
+    }
+  };
+
   // Value to be provided by the context
   const value = {
     runtimes,
@@ -319,6 +539,7 @@ export const RuntimeProvider = ({ children }) => {
     runtimeLogs,
     runtimeOutput,
     previewUrl,
+    runningProjects,
     createRuntime,
     startRuntime,
     stopRuntime,
@@ -326,7 +547,12 @@ export const RuntimeProvider = ({ children }) => {
     executeCode,
     addRuntimeLog,
     clearRuntimeLogs,
-    getProjectRuntimes
+    getProjectRuntimes,
+    runProject,
+    stopProject,
+    getProjectStatus,
+    getProjectOutput,
+    getProjectPreviewUrl
   };
 
   return (
