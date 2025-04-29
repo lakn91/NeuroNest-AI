@@ -1,10 +1,12 @@
 {
-  "name": "backend",
+  "name": "neuronest-ai-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Backend server for NeuroNest AI",
+  "main": "server.js",
   "scripts": {
-    "start": "node dist/server.js",
-    "dev": "nodemon src/server.ts",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "dev:ts": "nodemon src/server.ts",
     "build": "tsc",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -13,29 +15,38 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "@langchain/openai": "^0.5.7",
+    "@supabase/supabase-js": "^2.39.7",
     "axios": "^1.9.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "firebase-admin": "^13.3.0",
+    "jsonwebtoken": "^9.0.2",
     "langchain": "^0.3.24",
     "mongoose": "^8.14.0",
-    "socket.io": "^4.8.1"
+    "morgan": "^1.10.0",
+    "socket.io": "^4.8.1",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/jest": "^29.5.12",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/morgan": "^1.9.9",
     "@types/node": "^22.15.3",
     "@types/supertest": "^6.0.2",
+    "@types/uuid": "^9.0.8",
     "jest": "^29.7.0",
     "nodemon": "^3.1.10",
     "supertest": "^6.3.4",
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

@@ -10,30 +10,37 @@ NeuroNest-AI aims to be a comprehensive platform where users can input their ide
 
 ### Current Features
 - Interactive chat interface
-- Multi-modal input (text, voice, files)
+- Multi-modal input (text, voice, files) with dialect support
 - Specialized AI agents powered by LangChain.js:
   - Thinking Agent: Analyzes requests and creates plans
   - Developer Agent: Converts ideas into code (frontend focus)
   - Editor Agent: Reviews and improves outputs
   - Orchestrator Agent: Coordinates between specialized agents
 - Advanced document processing (PDF, text files)
-- Firebase integration for cloud storage:
-  - User settings
-  - Project history
+- Database integration for cloud storage:
+  - Firebase and Supabase support
+  - User settings and profiles
+  - Project history and file storage
   - Conversation history
+  - Agent memory persistence
 - Multiple AI provider support:
   - Google Gemini
   - OpenAI
 - User API key management
-- Code generation and preview
+- Code generation with Monaco editor
+- Project execution environment
+- Real-time project preview
 - Project export capabilities
 
-### Planned Features
-- Backend server generation
-- Multi-language support (Python, Java, Kotlin, Swift, etc.)
-- Automatic dependency management
-- Live execution environment
-- Custom agent creation
+### Key Improvements
+- Complete Firebase/Supabase integration
+- Real authentication system with user accounts
+- Agent memory integration for context awareness
+- Runtime and preview engine for project execution
+- Smart UI with agent workflow visualization
+- Dynamic agent orchestration
+- Multi-language programming support
+- Arabic dialect selection for voice input
 
 ## Getting Started
 
