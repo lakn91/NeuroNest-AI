@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Import API routers
 from app.api.routes import agents, auth, projects, execution, files, settings, speech
 from app.api.routes import github, code_analysis, sandbox, langchain_agent, memory, conversation
+from app.api.routes import runtime, orchestration
 
 # Create FastAPI app
 app = FastAPI(
@@ -61,6 +62,8 @@ app.include_router(langchain_agent.router, prefix="/api/agent", tags=["Agent"])
 app.include_router(memory.router, prefix="/api/memory", tags=["Memory"])
 app.include_router(conversation.router, prefix="/api/conversation", tags=["Conversation"])
 app.include_router(speech.router, prefix="/api/speech", tags=["Speech"])
+app.include_router(runtime.router, prefix="/api/runtime", tags=["Runtime"])
+app.include_router(orchestration.router, prefix="/api/orchestration", tags=["Orchestration"])
 
 # Mount static files for project outputs
 os.makedirs("./static/projects", exist_ok=True)
@@ -79,10 +82,15 @@ def shutdown_event():
         from app.services.docker_sandbox_service import docker_sandbox_service
         from app.services.github_service import github_service
         from app.services.langchain_agent_service import langchain_agent_service
+        from app.services.runtime_service import RuntimeService
         
         docker_sandbox_service.cleanup()
         github_service.cleanup()
         langchain_agent_service.cleanup()
+        
+        # Cleanup runtime service
+        runtime_service = RuntimeService()
+        runtime_service.cleanup_old_runtimes()
     except Exception as e:
         logger.error(f"Error during cleanup: {e}", exc_info=True)
 
