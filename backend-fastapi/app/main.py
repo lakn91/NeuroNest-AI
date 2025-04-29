@@ -17,7 +17,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import API routers
-from app.api.routes import agents, auth, projects, execution, files, settings
+from app.api.routes import agents, auth, projects, execution, files, settings, speech
+from app.api.routes import github, code_analysis, sandbox, langchain_agent, memory, conversation
 
 # Create FastAPI app
 app = FastAPI(
@@ -52,6 +53,15 @@ app.include_router(execution.router, prefix="/api/execution", tags=["Execution"]
 app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 
+# Include new routers
+app.include_router(github.router, prefix="/api/github", tags=["GitHub"])
+app.include_router(code_analysis.router, prefix="/api/code", tags=["Code Analysis"])
+app.include_router(sandbox.router, prefix="/api/sandbox", tags=["Sandbox"])
+app.include_router(langchain_agent.router, prefix="/api/agent", tags=["Agent"])
+app.include_router(memory.router, prefix="/api/memory", tags=["Memory"])
+app.include_router(conversation.router, prefix="/api/conversation", tags=["Conversation"])
+app.include_router(speech.router, prefix="/api/speech", tags=["Speech"])
+
 # Mount static files for project outputs
 os.makedirs("./static/projects", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -60,6 +70,21 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"status": "ok", "version": app.version}
+
+# Cleanup on shutdown
+@app.on_event("shutdown")
+def shutdown_event():
+    """Clean up resources on shutdown"""
+    try:
+        from app.services.docker_sandbox_service import docker_sandbox_service
+        from app.services.github_service import github_service
+        from app.services.langchain_agent_service import langchain_agent_service
+        
+        docker_sandbox_service.cleanup()
+        github_service.cleanup()
+        langchain_agent_service.cleanup()
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}", exc_info=True)
 
 if __name__ == "__main__":
     import uvicorn
