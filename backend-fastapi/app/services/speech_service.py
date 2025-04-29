@@ -316,7 +316,11 @@ def get_supported_languages() -> List[Dict[str, Any]]:
                 "dialects": [
                     {"code": "ar-AE", "name": "Arabic (UAE)"},
                     {"code": "ar-SA", "name": "Arabic (Saudi Arabia)"},
-                    {"code": "ar-EG", "name": "Arabic (Egypt)"}
+                    {"code": "ar-EG", "name": "Arabic (Egypt)"},
+                    {"code": "ar-IQ", "name": "Arabic (Iraq)"},
+                    {"code": "ar-JO", "name": "Arabic (Jordan)"},
+                    {"code": "ar-LB", "name": "Arabic (Lebanon)"},
+                    {"code": "ar-SY", "name": "Arabic (Syria)"}
                 ]
             },
             {
