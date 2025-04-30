@@ -10,6 +10,8 @@ class Settings(BaseModel):
     # API settings
     API_V1_STR: str = "/api"
     PROJECT_NAME: str = "NeuroNest-AI"
+    VERSION: str = "1.0.0"
+    DESCRIPTION: str = "Backend API for NeuroNest-AI, a multi-purpose intelligent agent platform"
     
     # CORS settings
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
@@ -22,6 +24,10 @@ class Settings(BaseModel):
     # Firebase settings
     FIREBASE_CREDENTIALS: Optional[str] = os.getenv("FIREBASE_CREDENTIALS")
     FIREBASE_WEB_API_KEY: Optional[str] = os.getenv("FIREBASE_WEB_API_KEY")
+    
+    # Supabase settings
+    SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY: Optional[str] = os.getenv("SUPABASE_KEY")
     
     # AI Provider settings
     DEFAULT_AI_PROVIDER: str = os.getenv("DEFAULT_AI_PROVIDER", "gemini")
@@ -50,6 +56,21 @@ class Settings(BaseModel):
     DEFAULT_SPEECH_LANGUAGE: str = os.getenv("DEFAULT_SPEECH_LANGUAGE", "en-US")
     DEFAULT_SPEECH_DIALECT: Optional[str] = os.getenv("DEFAULT_SPEECH_DIALECT")
     AUDIO_STORAGE_PATH: str = os.getenv("AUDIO_STORAGE_PATH", os.path.join(UPLOAD_DIR, "audio"))
+    
+    # Vector database settings
+    VECTOR_DB_TYPE: str = os.getenv("VECTOR_DB_TYPE", "chroma")
+    VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./data/vectordb")
+    VECTOR_DB_COLLECTION: str = os.getenv("VECTOR_DB_COLLECTION", "neuronest")
+    
+    # LangChain settings
+    LANGCHAIN_VERBOSE: bool = os.getenv("LANGCHAIN_VERBOSE", "false").lower() == "true"
+    LANGCHAIN_AGENT_TYPE: str = os.getenv("LANGCHAIN_AGENT_TYPE", "zero-shot-react-description")
+    LANGCHAIN_MEMORY_TYPE: str = os.getenv("LANGCHAIN_MEMORY_TYPE", "buffer")
+    LANGCHAIN_MEMORY_K: int = int(os.getenv("LANGCHAIN_MEMORY_K", "5"))
+    
+    # LlamaIndex settings
+    LLAMA_INDEX_CHUNK_SIZE: int = int(os.getenv("LLAMA_INDEX_CHUNK_SIZE", "1024"))
+    LLAMA_INDEX_CHUNK_OVERLAP: int = int(os.getenv("LLAMA_INDEX_CHUNK_OVERLAP", "20"))
     
     # Supported languages and dialects
     SUPPORTED_LANGUAGES: List[Dict[str, Any]] = [

@@ -1,3 +1,7 @@
+"""
+Document Index Service - Provides document indexing and search using LlamaIndex
+"""
+
 import os
 import uuid
 import logging
@@ -6,11 +10,25 @@ from datetime import datetime
 import aiofiles
 import json
 
-from llama_index import VectorStoreIndex, SimpleDirectoryReader, Document
-from llama_index.vector_stores import ChromaVectorStore
-from llama_index.storage.storage_context import StorageContext
-from llama_index.embeddings import OpenAIEmbedding
-import chromadb
+from app.core.config import settings
+from app.database.supabase_client import get_supabase_client
+
+# Import LlamaIndex components
+try:
+    from llama_index import VectorStoreIndex, SimpleDirectoryReader, Document, ServiceContext
+    from llama_index.vector_stores import ChromaVectorStore
+    from llama_index.storage.storage_context import StorageContext
+    from llama_index.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
+    from llama_index.node_parser import SimpleNodeParser
+    from llama_index.llms import OpenAI
+    import chromadb
+    from chromadb.config import Settings as ChromaSettings
+    
+    # Flag to indicate that document indexing is available
+    DOCUMENT_INDEX_AVAILABLE = True
+except ImportError:
+    DOCUMENT_INDEX_AVAILABLE = False
+    logging.warning("Document indexing components not available. Using fallback storage.")
 
 logger = logging.getLogger(__name__)
 
@@ -20,18 +38,64 @@ class DocumentIndexService:
     """
     
     def __init__(self):
-        self.index_base_path = os.path.join(os.getcwd(), "static", "indices")
-        os.makedirs(self.index_base_path, exist_ok=True)
+        self.logger = logger
+        self.supabase = get_supabase_client()
         
-        # Initialize Chroma client
-        self.chroma_client = chromadb.PersistentClient(os.path.join(self.index_base_path, "chroma_db"))
+        # Set up index paths
+        self.index_base_path = settings.VECTOR_DB_PATH
+        os.makedirs(self.index_base_path, exist_ok=True)
         
         # In-memory storage for index metadata
         # In a production environment, this would be stored in a database
         self.indices = {}
         
+        # Initialize components if available
+        if DOCUMENT_INDEX_AVAILABLE:
+            self._init_components()
+        
         # Load existing indices
         self._load_indices()
+    
+    def _init_components(self):
+        """Initialize LlamaIndex and Chroma components"""
+        try:
+            # Initialize Chroma client with settings
+            self.chroma_client = chromadb.PersistentClient(
+                path=os.path.join(self.index_base_path, "chroma_db"),
+                settings=ChromaSettings(
+                    anonymized_telemetry=False
+                )
+            )
+            
+            # Initialize LLM and embedding function
+            if settings.OPENAI_API_KEY:
+                self.llm = OpenAI(
+                    model="gpt-3.5-turbo",
+                    temperature=settings.AGENT_TEMPERATURE,
+                    api_key=settings.OPENAI_API_KEY
+                )
+                self.embed_model = OpenAIEmbeddings()
+                self.logger.info("Using OpenAI for document indexing")
+            else:
+                # Use HuggingFace embeddings as fallback
+                self.llm = None
+                self.embed_model = HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-mpnet-base-v2"
+                )
+                self.logger.info("Using HuggingFace embeddings for document indexing")
+            
+            # Create service context with settings
+            self.service_context = ServiceContext.from_defaults(
+                llm=self.llm,
+                embed_model=self.embed_model,
+                chunk_size=settings.LLAMA_INDEX_CHUNK_SIZE,
+                chunk_overlap=settings.LLAMA_INDEX_CHUNK_OVERLAP
+            )
+            
+            self.logger.info("Document index components initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Error initializing document index components: {e}")
+            raise
     
     async def create_index(
         self,
@@ -100,7 +164,7 @@ class DocumentIndexService:
         index = VectorStoreIndex.from_documents(
             llama_docs,
             storage_context=storage_context,
-            embed_model=OpenAIEmbedding()
+            service_context=self.service_context
         )
         
         # Update index metadata
@@ -140,7 +204,7 @@ class DocumentIndexService:
         index = VectorStoreIndex.from_documents(
             documents,
             storage_context=storage_context,
-            embed_model=OpenAIEmbedding()
+            service_context=self.service_context
         )
         
         # Update index metadata
@@ -172,7 +236,7 @@ class DocumentIndexService:
         # Create index
         index = VectorStoreIndex.from_vector_store(
             vector_store,
-            embed_model=OpenAIEmbedding()
+            service_context=self.service_context
         )
         
         # Create query engine
@@ -242,5 +306,20 @@ class DocumentIndexService:
                 with open(indices_file, "r") as f:
                     self.indices = json.loads(f.read())
             except Exception as e:
-                logger.error(f"Error loading indices: {str(e)}", exc_info=True)
+                self.logger.error(f"Error loading indices: {str(e)}", exc_info=True)
                 self.indices = {}
+    
+    async def close(self):
+        """
+        Close the document index
+        """
+        try:
+            # No explicit close method for Chroma client in chromadb
+            # But we can reset the client
+            if DOCUMENT_INDEX_AVAILABLE:
+                self.chroma_client = None
+                self.embed_model = None
+                self.service_context = None
+            self.logger.info("Document index service connections closed")
+        except Exception as e:
+            self.logger.error(f"Error closing document index service connections: {e}")
