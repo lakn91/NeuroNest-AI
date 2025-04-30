@@ -552,7 +552,44 @@ export const RuntimeProvider = ({ children }) => {
     stopProject,
     getProjectStatus,
     getProjectOutput,
-    getProjectPreviewUrl
+    getProjectPreviewUrl,
+    // Enhanced database integration with API fallback
+    listRunningProjects: async () => {
+      try {
+        // Try to use database service first
+        if (runtimeService && runtimeService.listRuntimes) {
+          const result = await runtimeService.listRuntimes();
+          
+          if (!result.error) {
+            // Update running projects
+            const projects = {};
+            
+            result.data.forEach(runtime => {
+              projects[runtime.project_id] = {
+                status: runtime.status,
+                runtimeId: runtime.id,
+                previewUrl: runtime.preview_url
+              };
+            });
+            
+            setRunningProjects(projects);
+            
+            return result.data;
+          }
+        }
+        
+        // Fallback to local state
+        return Object.keys(runningProjects).map(projectId => ({
+          project_id: projectId,
+          status: runningProjects[projectId].status,
+          id: runningProjects[projectId].runtimeId,
+          preview_url: runningProjects[projectId].previewUrl
+        }));
+      } catch (error) {
+        console.error('Error listing running projects:', error);
+        return [];
+      }
+    }
   };
 
   return (

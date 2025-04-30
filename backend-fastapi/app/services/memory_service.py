@@ -1,16 +1,534 @@
 """
 Memory Service
-Handles agent memory storage and retrieval
+Handles agent memory storage and retrieval using Chroma vector database and LangChain
 """
 
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import json
 import uuid
-
+import os
+import logging
+from app.core.config import settings
 from app.database.supabase_client import get_supabase_client
 
+# Import LangChain and Chroma components
+try:
+    import chromadb
+    from chromadb.config import Settings as ChromaSettings
+    from langchain.vectorstores import Chroma
+    from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
+    from langchain.schema import Document
+    from langchain.memory import VectorStoreRetrieverMemory
+    from langchain.memory import ConversationBufferMemory, ConversationBufferWindowMemory
+    
+    # Initialize Chroma client
+    CHROMA_PERSIST_DIRECTORY = settings.VECTOR_DB_PATH
+    os.makedirs(CHROMA_PERSIST_DIRECTORY, exist_ok=True)
+    
+    chroma_client = chromadb.PersistentClient(
+        path=CHROMA_PERSIST_DIRECTORY,
+        settings=ChromaSettings(
+            anonymized_telemetry=False
+        )
+    )
+    
+    # Initialize embedding function
+    if settings.OPENAI_API_KEY:
+        embedding_function = OpenAIEmbeddings()
+    else:
+        # Use HuggingFace embeddings as fallback
+        embedding_function = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-mpnet-base-v2"
+        )
+    
+    # Flag to indicate that vector memory is available
+    VECTOR_MEMORY_AVAILABLE = True
+except ImportError:
+    VECTOR_MEMORY_AVAILABLE = False
+    logging.warning("Vector memory components not available. Using fallback memory storage.")
 
+class MemoryService:
+    def __init__(self):
+        """Initialize the memory service"""
+        self.supabase = get_supabase_client()
+        self.logger = logging.getLogger(__name__)
+        
+        # Initialize vector store if available
+        if VECTOR_MEMORY_AVAILABLE:
+            self._init_vector_store()
+    
+    def _init_vector_store(self):
+        """Initialize the vector store for semantic memory"""
+        # Create default collection if it doesn't exist
+        try:
+            self.default_collection = chroma_client.get_or_create_collection(
+                name=settings.VECTOR_DB_COLLECTION
+            )
+            self.logger.info(f"Vector store initialized with collection: {settings.VECTOR_DB_COLLECTION}")
+        except Exception as e:
+            self.logger.error(f"Error initializing vector store: {str(e)}")
+            self.default_collection = None
+    
+    async def create_memory(
+        self,
+        user_id: str,
+        agent_id: str,
+        content: str,
+        context: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new memory entry
+        
+        Args:
+            user_id: User ID
+            agent_id: Agent ID
+            content: Memory content
+            context: Optional context for the memory
+            metadata: Optional metadata for the memory
+            
+        Returns:
+            Created memory entry
+        """
+        # Generate a unique ID for the memory
+        memory_id = str(uuid.uuid4())
+        
+        # Create timestamp
+        now = datetime.utcnow().isoformat()
+        
+        # Create memory entry
+        memory_data = {
+            "id": memory_id,
+            "user_id": user_id,
+            "agent_id": agent_id,
+            "content": content,
+            "context": context or "",
+            "metadata": json.dumps(metadata) if metadata else "{}",
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        # Store in Supabase
+        response = self.supabase.table("agent_memories").insert(memory_data).execute()
+        
+        if not response.data or len(response.data) == 0:
+            raise Exception("Failed to create memory")
+        
+        memory = response.data[0]
+        
+        # Store in vector database if available
+        if VECTOR_MEMORY_AVAILABLE and self.default_collection:
+            try:
+                # Prepare metadata
+                vector_metadata = {
+                    "memory_id": memory_id,
+                    "user_id": user_id,
+                    "agent_id": agent_id,
+                    "context": context or "",
+                    "timestamp": now
+                }
+                
+                # Add to vector store
+                self.default_collection.add(
+                    ids=[memory_id],
+                    documents=[content],
+                    metadatas=[vector_metadata]
+                )
+            except Exception as e:
+                logging.error(f"Error storing memory in vector database: {str(e)}")
+        
+        # Parse metadata JSON
+        if memory.get("metadata"):
+            try:
+                memory["metadata"] = json.loads(memory["metadata"])
+            except json.JSONDecodeError:
+                memory["metadata"] = {}
+        
+        # Return the created memory
+        return memory
+    
+    async def get_memories(
+        self,
+        user_id: str,
+        agent_id: Optional[str] = None,
+        context: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """
+        Get memories for a user
+        
+        Args:
+            user_id: User ID
+            agent_id: Optional agent ID to filter by
+            context: Optional context to filter by
+            limit: Maximum number of memories to return
+            offset: Offset for pagination
+            
+        Returns:
+            List of memory entries
+        """
+        query = self.supabase.table("agent_memories").select("*").eq("user_id", user_id)
+        
+        if agent_id:
+            query = query.eq("agent_id", agent_id)
+        
+        if context:
+            query = query.eq("context", context)
+        
+        query = query.order("created_at", desc=True).limit(limit).offset(offset)
+        
+        response = query.execute()
+        
+        if not response.data:
+            return []
+        
+        # Parse metadata JSON
+        for memory in response.data:
+            if memory.get("metadata"):
+                try:
+                    memory["metadata"] = json.loads(memory["metadata"])
+                except json.JSONDecodeError:
+                    memory["metadata"] = {}
+        
+        return response.data
+    
+    async def get_memory_by_id(self, memory_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a memory by ID
+        
+        Args:
+            memory_id: Memory ID
+            
+        Returns:
+            Memory entry or None if not found
+        """
+        response = self.supabase.table("agent_memories").select("*").eq("id", memory_id).execute()
+        
+        if not response.data or len(response.data) == 0:
+            return None
+        
+        memory = response.data[0]
+        
+        # Parse metadata JSON
+        if memory.get("metadata"):
+            try:
+                memory["metadata"] = json.loads(memory["metadata"])
+            except json.JSONDecodeError:
+                memory["metadata"] = {}
+        
+        return memory
+    
+    async def update_memory(
+        self,
+        memory_id: str,
+        content: Optional[str] = None,
+        context: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update a memory
+        
+        Args:
+            memory_id: Memory ID
+            content: Optional new content
+            context: Optional new context
+            metadata: Optional new metadata
+            
+        Returns:
+            Updated memory entry or None if not found
+        """
+        # Get current memory to merge metadata
+        current_memory = await self.get_memory_by_id(memory_id)
+        
+        if not current_memory:
+            return None
+        
+        update_data = {
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        if content is not None:
+            update_data["content"] = content
+        
+        if context is not None:
+            update_data["context"] = context
+        
+        if metadata is not None:
+            # Merge with existing metadata
+            current_metadata = current_memory.get("metadata", {})
+            merged_metadata = {**current_metadata, **metadata}
+            update_data["metadata"] = json.dumps(merged_metadata)
+        
+        response = self.supabase.table("agent_memories").update(update_data).eq("id", memory_id).execute()
+        
+        if not response.data or len(response.data) == 0:
+            return None
+        
+        memory = response.data[0]
+        
+        # Update in vector database if available
+        if VECTOR_MEMORY_AVAILABLE and self.default_collection and content is not None:
+            try:
+                # Prepare metadata
+                vector_metadata = {
+                    "memory_id": memory_id,
+                    "user_id": current_memory["user_id"],
+                    "agent_id": current_memory["agent_id"],
+                    "context": context or current_memory["context"],
+                    "timestamp": update_data["updated_at"]
+                }
+                
+                # Update in vector store
+                self.default_collection.update(
+                    ids=[memory_id],
+                    documents=[content],
+                    metadatas=[vector_metadata]
+                )
+            except Exception as e:
+                logging.error(f"Error updating memory in vector database: {str(e)}")
+        
+        # Parse metadata JSON
+        if memory.get("metadata"):
+            try:
+                memory["metadata"] = json.loads(memory["metadata"])
+            except json.JSONDecodeError:
+                memory["metadata"] = {}
+        
+        return memory
+    
+    async def delete_memory(self, memory_id: str) -> bool:
+        """
+        Delete a memory
+        
+        Args:
+            memory_id: Memory ID
+            
+        Returns:
+            True if deleted, False otherwise
+        """
+        response = self.supabase.table("agent_memories").delete().eq("id", memory_id).execute()
+        
+        # Delete from vector database if available
+        if VECTOR_MEMORY_AVAILABLE and self.default_collection:
+            try:
+                self.default_collection.delete(ids=[memory_id])
+            except Exception as e:
+                logging.error(f"Error deleting memory from vector database: {str(e)}")
+        
+        return response.data is not None and len(response.data) > 0
+    
+    async def delete_agent_memories(self, user_id: str, agent_id: str) -> bool:
+        """
+        Delete all memories for an agent
+        
+        Args:
+            user_id: User ID
+            agent_id: Agent ID
+            
+        Returns:
+            True if deleted, False otherwise
+        """
+        # Get all memory IDs for this agent
+        memories = await self.get_memories(user_id, agent_id)
+        memory_ids = [memory["id"] for memory in memories]
+        
+        # Delete from Supabase
+        response = self.supabase.table("agent_memories").delete().eq("user_id", user_id).eq("agent_id", agent_id).execute()
+        
+        # Delete from vector database if available
+        if VECTOR_MEMORY_AVAILABLE and self.default_collection and memory_ids:
+            try:
+                self.default_collection.delete(ids=memory_ids)
+            except Exception as e:
+                logging.error(f"Error deleting agent memories from vector database: {str(e)}")
+        
+        return response.data is not None
+    
+    async def search_memories(
+        self,
+        user_id: str,
+        query: str,
+        agent_id: Optional[str] = None,
+        context: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Search memories by content
+        
+        Args:
+            user_id: User ID
+            query: Search query
+            agent_id: Optional agent ID to filter by
+            context: Optional context to filter by
+            limit: Maximum number of memories to return
+            
+        Returns:
+            List of memory entries
+        """
+        # If vector search is available, use it for semantic search
+        if VECTOR_MEMORY_AVAILABLE and self.default_collection:
+            try:
+                # Prepare filter
+                filter_dict = {"user_id": user_id}
+                if agent_id:
+                    filter_dict["agent_id"] = agent_id
+                if context:
+                    filter_dict["context"] = context
+                
+                # Perform vector search
+                results = self.default_collection.query(
+                    query_texts=[query],
+                    n_results=limit,
+                    where=filter_dict
+                )
+                
+                # Get memory IDs from results
+                if results and results['ids'] and len(results['ids'][0]) > 0:
+                    memory_ids = results['ids'][0]
+                    
+                    # Fetch full memory objects from Supabase
+                    memories = []
+                    for memory_id in memory_ids:
+                        memory = await self.get_memory_by_id(memory_id)
+                        if memory:
+                            memories.append(memory)
+                    
+                    return memories
+            except Exception as e:
+                logging.error(f"Error in vector search: {str(e)}")
+                # Fall back to traditional search
+        
+        # Traditional search using LIKE queries
+        search_query = f"%{query}%"
+        
+        query_builder = self.supabase.table("agent_memories").select("*").eq("user_id", user_id).like("content", search_query)
+        
+        if agent_id:
+            query_builder = query_builder.eq("agent_id", agent_id)
+        
+        if context:
+            query_builder = query_builder.eq("context", context)
+        
+        response = query_builder.limit(limit).execute()
+        
+        if not response.data:
+            return []
+        
+        # Parse metadata JSON
+        for memory in response.data:
+            if memory.get("metadata"):
+                try:
+                    memory["metadata"] = json.loads(memory["metadata"])
+                except json.JSONDecodeError:
+                    memory["metadata"] = {}
+        
+        return response.data
+    
+    async def get_langchain_memory(
+        self,
+        user_id: str,
+        agent_id: str,
+        memory_key: str = "chat_history",
+        memory_type: str = None,
+        k: int = 5
+    ):
+        """
+        Get a LangChain memory object for an agent
+        
+        Args:
+            user_id: User ID
+            agent_id: Agent ID
+            memory_key: Memory key for the LangChain memory
+            memory_type: Type of memory (buffer, buffer_window, vector)
+            k: Number of messages to keep in window memory
+            
+        Returns:
+            LangChain memory object
+        """
+        # Use settings if memory_type not provided
+        if memory_type is None:
+            memory_type = settings.LANGCHAIN_MEMORY_TYPE
+            
+        # Use settings if k not provided
+        if k == 5 and hasattr(settings, 'LANGCHAIN_MEMORY_K'):
+            k = settings.LANGCHAIN_MEMORY_K
+        
+        # If vector memory is not available or not requested, use buffer memory
+        if not VECTOR_MEMORY_AVAILABLE or memory_type != "vector":
+            if memory_type == "buffer_window":
+                self.logger.info(f"Creating buffer window memory with k={k}")
+                return ConversationBufferWindowMemory(
+                    memory_key=memory_key,
+                    k=k,
+                    return_messages=True
+                )
+            else:
+                self.logger.info("Creating buffer memory")
+                return ConversationBufferMemory(
+                    memory_key=memory_key,
+                    return_messages=True
+                )
+        
+        try:
+            # Create a collection for this specific agent
+            collection_name = f"agent_{agent_id}_user_{user_id}"
+            collection = chroma_client.get_or_create_collection(
+                name=collection_name
+            )
+            
+            # Create vector store
+            vectorstore = Chroma(
+                collection_name=collection_name,
+                embedding_function=embedding_function,
+                client=chroma_client
+            )
+            
+            # Create retriever
+            retriever = vectorstore.as_retriever(
+                search_kwargs={"k": k}
+            )
+            
+            # Create memory
+            memory = VectorStoreRetrieverMemory(
+                retriever=retriever,
+                memory_key=memory_key,
+                return_messages=True
+            )
+            
+            self.logger.info(f"Created vector memory for agent {agent_id}")
+            return memory
+        except Exception as e:
+            self.logger.error(f"Error creating LangChain memory: {str(e)}")
+            # Fallback to conversation buffer memory
+            return ConversationBufferMemory(
+                memory_key=memory_key,
+                return_messages=True
+            )
+
+# Create a singleton instance
+memory_service = MemoryService()
+
+# Add close method to the class
+async def close(self):
+    """
+    Close the vector database connection
+    """
+    try:
+        # No explicit close method for Chroma client in chromadb
+        # But we can reset the client
+        global chroma_client
+        chroma_client = None
+        self.default_collection = None
+        self.logger.info("Memory service connections closed")
+    except Exception as e:
+        self.logger.error(f"Error closing memory service connections: {e}")
+
+# Add the close method to the class
+MemoryService.close = close
+
+# Legacy function wrappers for backward compatibility
 async def create_memory(
     user_id: str,
     agent_id: str,
@@ -18,42 +536,7 @@ async def create_memory(
     context: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """
-    Create a new memory entry
-    
-    Args:
-        user_id: User ID
-        agent_id: Agent ID
-        content: Memory content
-        context: Optional context for the memory
-        metadata: Optional metadata for the memory
-        
-    Returns:
-        Created memory entry
-    """
-    supabase = get_supabase_client()
-    
-    memory_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
-    
-    memory_data = {
-        "id": memory_id,
-        "user_id": user_id,
-        "agent_id": agent_id,
-        "content": content,
-        "context": context or "",
-        "metadata": json.dumps(metadata) if metadata else "{}",
-        "created_at": now,
-        "updated_at": now
-    }
-    
-    response = supabase.table("agent_memories").insert(memory_data).execute()
-    
-    if not response.data or len(response.data) == 0:
-        raise Exception("Failed to create memory")
-    
-    return response.data[0]
-
+    return await memory_service.create_memory(user_id, agent_id, content, context, metadata)
 
 async def get_memories(
     user_id: str,
@@ -62,75 +545,10 @@ async def get_memories(
     limit: int = 100,
     offset: int = 0
 ) -> List[Dict[str, Any]]:
-    """
-    Get memories for a user
-    
-    Args:
-        user_id: User ID
-        agent_id: Optional agent ID to filter by
-        context: Optional context to filter by
-        limit: Maximum number of memories to return
-        offset: Offset for pagination
-        
-    Returns:
-        List of memory entries
-    """
-    supabase = get_supabase_client()
-    
-    query = supabase.table("agent_memories").select("*").eq("user_id", user_id)
-    
-    if agent_id:
-        query = query.eq("agent_id", agent_id)
-    
-    if context:
-        query = query.eq("context", context)
-    
-    query = query.order("created_at", desc=True).limit(limit).offset(offset)
-    
-    response = query.execute()
-    
-    if not response.data:
-        return []
-    
-    # Parse metadata JSON
-    for memory in response.data:
-        if memory.get("metadata"):
-            try:
-                memory["metadata"] = json.loads(memory["metadata"])
-            except json.JSONDecodeError:
-                memory["metadata"] = {}
-    
-    return response.data
-
+    return await memory_service.get_memories(user_id, agent_id, context, limit, offset)
 
 async def get_memory_by_id(memory_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Get a memory by ID
-    
-    Args:
-        memory_id: Memory ID
-        
-    Returns:
-        Memory entry or None if not found
-    """
-    supabase = get_supabase_client()
-    
-    response = supabase.table("agent_memories").select("*").eq("id", memory_id).execute()
-    
-    if not response.data or len(response.data) == 0:
-        return None
-    
-    memory = response.data[0]
-    
-    # Parse metadata JSON
-    if memory.get("metadata"):
-        try:
-            memory["metadata"] = json.loads(memory["metadata"])
-        except json.JSONDecodeError:
-            memory["metadata"] = {}
-    
-    return memory
-
+    return await memory_service.get_memory_by_id(memory_id)
 
 async def update_memory(
     memory_id: str,
@@ -138,93 +556,13 @@ async def update_memory(
     context: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None
 ) -> Optional[Dict[str, Any]]:
-    """
-    Update a memory
-    
-    Args:
-        memory_id: Memory ID
-        content: Optional new content
-        context: Optional new context
-        metadata: Optional new metadata
-        
-    Returns:
-        Updated memory entry or None if not found
-    """
-    supabase = get_supabase_client()
-    
-    # Get current memory to merge metadata
-    current_memory = await get_memory_by_id(memory_id)
-    
-    if not current_memory:
-        return None
-    
-    update_data = {
-        "updated_at": datetime.utcnow().isoformat()
-    }
-    
-    if content is not None:
-        update_data["content"] = content
-    
-    if context is not None:
-        update_data["context"] = context
-    
-    if metadata is not None:
-        # Merge with existing metadata
-        current_metadata = current_memory.get("metadata", {})
-        merged_metadata = {**current_metadata, **metadata}
-        update_data["metadata"] = json.dumps(merged_metadata)
-    
-    response = supabase.table("agent_memories").update(update_data).eq("id", memory_id).execute()
-    
-    if not response.data or len(response.data) == 0:
-        return None
-    
-    memory = response.data[0]
-    
-    # Parse metadata JSON
-    if memory.get("metadata"):
-        try:
-            memory["metadata"] = json.loads(memory["metadata"])
-        except json.JSONDecodeError:
-            memory["metadata"] = {}
-    
-    return memory
-
+    return await memory_service.update_memory(memory_id, content, context, metadata)
 
 async def delete_memory(memory_id: str) -> bool:
-    """
-    Delete a memory
-    
-    Args:
-        memory_id: Memory ID
-        
-    Returns:
-        True if deleted, False otherwise
-    """
-    supabase = get_supabase_client()
-    
-    response = supabase.table("agent_memories").delete().eq("id", memory_id).execute()
-    
-    return response.data is not None and len(response.data) > 0
-
+    return await memory_service.delete_memory(memory_id)
 
 async def delete_agent_memories(user_id: str, agent_id: str) -> bool:
-    """
-    Delete all memories for an agent
-    
-    Args:
-        user_id: User ID
-        agent_id: Agent ID
-        
-    Returns:
-        True if deleted, False otherwise
-    """
-    supabase = get_supabase_client()
-    
-    response = supabase.table("agent_memories").delete().eq("user_id", user_id).eq("agent_id", agent_id).execute()
-    
-    return response.data is not None
-
+    return await memory_service.delete_agent_memories(user_id, agent_id)
 
 async def search_memories(
     user_id: str,
@@ -233,44 +571,11 @@ async def search_memories(
     context: Optional[str] = None,
     limit: int = 10
 ) -> List[Dict[str, Any]]:
-    """
-    Search memories by content
-    
-    Args:
-        user_id: User ID
-        query: Search query
-        agent_id: Optional agent ID to filter by
-        context: Optional context to filter by
-        limit: Maximum number of memories to return
-        
-    Returns:
-        List of memory entries
-    """
-    supabase = get_supabase_client()
-    
-    # This is a simple implementation using LIKE queries
-    # In a production environment, you would use a more sophisticated search mechanism
-    search_query = f"%{query}%"
-    
-    query_builder = supabase.table("agent_memories").select("*").eq("user_id", user_id).like("content", search_query)
-    
-    if agent_id:
-        query_builder = query_builder.eq("agent_id", agent_id)
-    
-    if context:
-        query_builder = query_builder.eq("context", context)
-    
-    response = query_builder.limit(limit).execute()
-    
-    if not response.data:
-        return []
-    
-    # Parse metadata JSON
-    for memory in response.data:
-        if memory.get("metadata"):
-            try:
-                memory["metadata"] = json.loads(memory["metadata"])
-            except json.JSONDecodeError:
-                memory["metadata"] = {}
-    
-    return response.data
+    return await memory_service.search_memories(user_id, query, agent_id, context, limit)
+
+async def get_langchain_memory(
+    user_id: str,
+    agent_id: str,
+    memory_key: str = "chat_history"
+):
+    return await memory_service.get_langchain_memory(user_id, agent_id, memory_key)
