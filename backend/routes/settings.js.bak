@@ -1,0 +1,278 @@
+/**
+ * Settings routes for NeuroNest AI
+ * Handles user settings with both Firebase and Supabase
+ */
+
+const express = require('express');
+const { getSupabaseClient, isSupabaseInitialized } = require("../services/supabase");
+const router = express.Router();
+const admin = require('firebase-admin');
+
+const { verifyToken } = require('./auth');
+
+// Initialize Firebase references conditionally
+let db, settingsRef, userSettingsRef;
+try {
+  if (process.env.USE_SUPABASE !== "true" && admin.apps.length > 0) {
+    db = admin.firestore();
+    settingsRef = db.collection("settings");
+    userSettingsRef = db.collection("user_settings");
+    console.log("Firebase references initialized in settings.js");
+  }
+} catch (error) {
+  console.error("Error initializing Firebase references in settings.js:", error);
+}
+
+// Firebase references
+
+// Available dialects
+const AVAILABLE_DIALECTS = [
+  { id: 'standard', name: 'Standard Arabic', code: 'ar-SA' },
+  { id: 'egyptian', name: 'Egyptian Arabic', code: 'ar-EG' },
+  { id: 'levantine', name: 'Levantine Arabic', code: 'ar-LB' },
+  { id: 'gulf', name: 'Gulf Arabic', code: 'ar-AE' },
+  { id: 'maghrebi', name: 'Maghrebi Arabic', code: 'ar-MA' },
+  { id: 'iraqi', name: 'Iraqi Arabic', code: 'ar-IQ' }
+];
+
+/**
+ * Get user settings
+ * @route GET /api/settings
+ */
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid || req.user.id;
+    
+    // Check if using Supabase
+    const useSupabase = process.env.USE_SUPABASE === 'true';
+    
+    if (useSupabase) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        return res.status(500).json({ error: "Supabase client not initialized" });
+      }
+      const { data, error } = await getSupabaseClient()
+        .from('profiles')
+        .select('settings')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        throw error;
+      }
+      
+      res.json({ settings: data.settings || {} });
+    } else {
+      const doc = await usersRef.doc(userId).get();
+      
+      if (!doc.exists) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      res.json({ settings: doc.data().settings || {} });
+    }
+  } catch (error) {
+    console.error('Error getting settings:', error);
+    res.status(500).json({ error: 'Failed to get settings' });
+  }
+});
+
+/**
+ * Update user settings
+ * @route PUT /api/settings
+ */
+router.put('/', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid || req.user.id;
+    const { settings } = req.body;
+    
+    if (!settings) {
+      return res.status(400).json({ error: 'Settings are required' });
+    }
+    
+    // Check if using Supabase
+    const useSupabase = process.env.USE_SUPABASE === 'true';
+    
+    if (useSupabase) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        return res.status(500).json({ error: "Supabase client not initialized" });
+      }
+      // First get current settings
+      const { data: currentData, error: fetchError } = await getSupabaseClient()
+        .from('profiles')
+        .select('settings')
+        .eq('id', userId)
+        .single();
+      
+      if (fetchError) {
+        throw fetchError;
+      }
+      
+      // Merge current settings with new settings
+      const mergedSettings = {
+        ...(currentData.settings || {}),
+        ...settings
+      };
+      
+      // Update settings
+      const { data, error } = await getSupabaseClient()
+        .from('profiles')
+        .update({ settings: mergedSettings })
+        .eq('id', userId)
+        .select()
+        .single();
+      
+      if (error) {
+        throw error;
+      }
+      
+      res.json({ settings: data.settings });
+    } else {
+      // First get current settings
+      const doc = await usersRef.doc(userId).get();
+      
+      if (!doc.exists) {
+        // Create user document if it doesn't exist
+        await usersRef.doc(userId).set({
+          settings,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        // Merge current settings with new settings
+        const currentSettings = doc.data().settings || {};
+        const mergedSettings = {
+          ...currentSettings,
+          ...settings
+        };
+        
+        // Update settings
+        await usersRef.doc(userId).update({
+          settings: mergedSettings,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      
+      // Get updated settings
+      const updatedDoc = await usersRef.doc(userId).get();
+      
+      res.json({ settings: updatedDoc.data().settings });
+    }
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+/**
+ * Get available dialects
+ * @route GET /api/settings/dialects
+ */
+router.get('/dialects', async (req, res) => {
+  try {
+    res.json({ dialects: AVAILABLE_DIALECTS });
+  } catch (error) {
+    console.error('Error getting dialects:', error);
+    res.status(500).json({ error: 'Failed to get dialects' });
+  }
+});
+
+/**
+ * Update user dialect
+ * @route PUT /api/settings/dialect
+ */
+router.put('/dialect', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid || req.user.id;
+    const { dialectId } = req.body;
+    
+    if (!dialectId) {
+      return res.status(400).json({ error: 'Dialect ID is required' });
+    }
+    
+    // Check if dialect is valid
+    const dialect = AVAILABLE_DIALECTS.find(d => d.id === dialectId);
+    
+    if (!dialect) {
+      return res.status(400).json({ error: 'Invalid dialect ID' });
+    }
+    
+    // Check if using Supabase
+    const useSupabase = process.env.USE_SUPABASE === 'true';
+    
+    if (useSupabase) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        return res.status(500).json({ error: "Supabase client not initialized" });
+      }
+      // First get current settings
+      const { data: currentData, error: fetchError } = await getSupabaseClient()
+        .from('profiles')
+        .select('settings')
+        .eq('id', userId)
+        .single();
+      
+      if (fetchError) {
+        throw fetchError;
+      }
+      
+      // Update dialect in settings
+      const settings = {
+        ...(currentData.settings || {}),
+        dialect: dialectId
+      };
+      
+      // Update settings
+      const { data, error } = await getSupabaseClient()
+        .from('profiles')
+        .update({ settings })
+        .eq('id', userId)
+        .select()
+        .single();
+      
+      if (error) {
+        throw error;
+      }
+      
+      res.json({ dialect, settings: data.settings });
+    } else {
+      // First get current settings
+      const doc = await usersRef.doc(userId).get();
+      
+      if (!doc.exists) {
+        // Create user document if it doesn't exist
+        await usersRef.doc(userId).set({
+          settings: { dialect: dialectId },
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        // Update dialect in settings
+        const settings = {
+          ...(doc.data().settings || {}),
+          dialect: dialectId
+        };
+        
+        // Update settings
+        await usersRef.doc(userId).update({
+          settings,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      
+      // Get updated settings
+      const updatedDoc = await usersRef.doc(userId).get();
+      
+      res.json({
+        dialect,
+        settings: updatedDoc.data().settings
+      });
+    }
+  } catch (error) {
+    console.error('Error updating dialect:', error);
+    res.status(500).json({ error: 'Failed to update dialect' });
+  }
+});
+
+module.exports = router;

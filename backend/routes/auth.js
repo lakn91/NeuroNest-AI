@@ -5,20 +5,25 @@
 
 const express = require('express');
 const router = express.Router();
-const admin = require('firebase-admin');
-const { createClient } = require('@supabase/supabase-js');
 const jwt = require('jsonwebtoken');
 
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Import Firebase and Supabase services
+const { getFirebaseAdmin, isFirebaseInitialized } = require('../services/firebase');
+const { getSupabaseClient, isSupabaseInitialized } = require('../services/supabase');
 
 /**
  * Middleware to verify Firebase token
  */
 const verifyFirebaseToken = async (req, res, next) => {
   try {
+    // Check if Firebase is initialized
+    if (!isFirebaseInitialized()) {
+      console.error('Firebase Admin SDK not initialized');
+      return res.status(500).json({ error: 'Internal server error: Authentication service unavailable' });
+    }
+    
+    const admin = getFirebaseAdmin();
+    
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized: No token provided' });
@@ -39,6 +44,14 @@ const verifyFirebaseToken = async (req, res, next) => {
  */
 const verifySupabaseToken = async (req, res, next) => {
   try {
+    // Check if Supabase is initialized
+    if (!isSupabaseInitialized()) {
+      console.error('Supabase client not initialized');
+      return res.status(500).json({ error: 'Internal server error: Authentication service unavailable' });
+    }
+
+    const supabase = getSupabaseClient();
+    
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized: No token provided' });
@@ -98,6 +111,13 @@ router.post('/token', async (req, res) => {
       return res.status(400).json({ error: 'User ID is required' });
     }
     
+    // Check if Firebase is initialized
+    if (!isFirebaseInitialized()) {
+      console.error('Firebase Admin SDK not initialized');
+      return res.status(500).json({ error: 'Internal server error: Authentication service unavailable' });
+    }
+    
+    const admin = getFirebaseAdmin();
     const customToken = await admin.auth().createCustomToken(uid);
     res.json({ token: customToken });
   } catch (error) {
@@ -122,6 +142,13 @@ router.post('/verify', async (req, res) => {
     const useSupabase = process.env.USE_SUPABASE === 'true';
     
     if (useSupabase) {
+      // Check if Supabase is initialized
+      if (!isSupabaseInitialized()) {
+        console.error('Supabase client not initialized');
+        return res.status(500).json({ error: 'Internal server error: Authentication service unavailable' });
+      }
+      
+      const supabase = getSupabaseClient();
       const { data, error } = await supabase.auth.getUser(token);
       
       if (error || !data.user) {
@@ -130,6 +157,13 @@ router.post('/verify', async (req, res) => {
       
       res.json({ valid: true, user: data.user });
     } else {
+      // Check if Firebase is initialized
+      if (!isFirebaseInitialized()) {
+        console.error('Firebase Admin SDK not initialized');
+        return res.status(500).json({ error: 'Internal server error: Authentication service unavailable' });
+      }
+      
+      const admin = getFirebaseAdmin();
       const decodedToken = await admin.auth().verifyIdToken(token);
       res.json({ valid: true, user: decodedToken });
     }
@@ -155,6 +189,13 @@ router.post('/revoke', verifyToken, async (req, res) => {
     const useSupabase = process.env.USE_SUPABASE === 'true';
     
     if (useSupabase) {
+      // Check if Supabase is initialized
+      if (!isSupabaseInitialized()) {
+        console.error('Supabase client not initialized');
+        return res.status(500).json({ error: 'Internal server error: Authentication service unavailable' });
+      }
+      
+      const supabase = getSupabaseClient();
       // For Supabase, we can sign out all sessions for a user
       const { error } = await supabase.auth.admin.signOut({
         scope: 'global',
@@ -165,6 +206,13 @@ router.post('/revoke', verifyToken, async (req, res) => {
         return res.status(500).json({ error: 'Failed to revoke tokens' });
       }
     } else {
+      // Check if Firebase is initialized
+      if (!isFirebaseInitialized()) {
+        console.error('Firebase Admin SDK not initialized');
+        return res.status(500).json({ error: 'Internal server error: Authentication service unavailable' });
+      }
+      
+      const admin = getFirebaseAdmin();
       // For Firebase, we can revoke all refresh tokens for a user
       await admin.auth().revokeRefreshTokens(uid);
     }

@@ -1,27 +1,29 @@
 /**
- * Conversations routes for NeuroNest AI
- * Handles conversation management with both Firebase and Supabase
+ * Conversation routes for NeuroNest AI
+ * Handles conversation history with both Firebase and Supabase
  */
 
 const express = require('express');
+const { getSupabaseClient, isSupabaseInitialized } = require("../services/supabase");
 const router = express.Router();
+const admin = require('firebase-admin');
 
+const { v4: uuidv4 } = require('uuid');
 const { verifyToken } = require('./auth');
-const { getFirebaseAdmin, getFirestore, isFirebaseInitialized } = require('../services/firebase');
-const { getSupabaseClient, isSupabaseInitialized } = require('../services/supabase');
 
-// Function to get Firestore references
-const getFirestoreRefs = () => {
-  if (!isFirebaseInitialized()) return null;
-  
-  const db = getFirestore();
-  if (!db) return null;
-  
-  return {
-    conversationsRef: db.collection("conversations"),
-    messagesRef: db.collection("messages")
-  };
-};
+// Initialize Firebase references conditionally
+let db, conversationsRef;
+try {
+  if (process.env.USE_SUPABASE !== 'true' && admin.apps.length > 0) {
+    db = admin.firestore();
+    conversationsRef = db.collection('conversations');
+    console.log('Firebase references initialized in conversations.js');
+  }
+} catch (error) {
+  console.error('Error initializing Firebase references in conversations.js:', error);
+}
+
+// Firebase references are initialized conditionally above
 
 /**
  * Get all conversations for a user
@@ -35,16 +37,15 @@ router.get('/', verifyToken, async (req, res) => {
     const useSupabase = process.env.USE_SUPABASE === 'true';
     
     if (useSupabase) {
-      if (!isSupabaseInitialized()) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
         return res.status(500).json({ error: "Supabase client not initialized" });
       }
-      
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
+      const { data, error } = await getSupabaseClient()
         .from('conversations')
         .select('*')
         .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
+        .order('created_at', { ascending: false });
       
       if (error) {
         throw error;
@@ -52,17 +53,9 @@ router.get('/', verifyToken, async (req, res) => {
       
       res.json({ conversations: data });
     } else {
-      // Check if Firebase is initialized
-      const refs = getFirestoreRefs();
-      if (!refs) {
-        return res.status(500).json({ error: "Firebase not initialized" });
-      }
-      
-      const { conversationsRef } = refs;
-      
       const snapshot = await conversationsRef
         .where('userId', '==', userId)
-        .orderBy('updatedAt', 'desc')
+        .orderBy('createdAt', 'desc')
         .get();
       
       const conversations = [];
@@ -94,76 +87,30 @@ router.get('/:id', verifyToken, async (req, res) => {
     const useSupabase = process.env.USE_SUPABASE === 'true';
     
     if (useSupabase) {
-      if (!isSupabaseInitialized()) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
         return res.status(500).json({ error: "Supabase client not initialized" });
       }
-      
-      const supabase = getSupabaseClient();
-      
-      // Get conversation
-      const { data: conversation, error: conversationError } = await supabase
+      const { data, error } = await getSupabaseClient()
         .from('conversations')
         .select('*')
         .eq('id', conversationId)
         .eq('user_id', userId)
         .single();
       
-      if (conversationError) {
+      if (error) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
       
-      // Get messages
-      const { data: messages, error: messagesError } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-      
-      if (messagesError) {
-        throw messagesError;
-      }
-      
-      res.json({
-        conversation,
-        messages
-      });
+      res.json({ conversation: data });
     } else {
-      // Check if Firebase is initialized
-      const refs = getFirestoreRefs();
-      if (!refs) {
-        return res.status(500).json({ error: "Firebase not initialized" });
-      }
+      const doc = await conversationsRef.doc(conversationId).get();
       
-      const { conversationsRef, messagesRef } = refs;
-      
-      // Get conversation
-      const conversationDoc = await conversationsRef.doc(conversationId).get();
-      
-      if (!conversationDoc.exists || conversationDoc.data().userId !== userId) {
+      if (!doc.exists || doc.data().userId !== userId) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
       
-      // Get messages
-      const messagesSnapshot = await messagesRef
-        .where('conversationId', '==', conversationId)
-        .orderBy('createdAt', 'asc')
-        .get();
-      
-      const messages = [];
-      messagesSnapshot.forEach(doc => {
-        messages.push({
-          id: doc.id,
-          ...doc.data()
-        });
-      });
-      
-      res.json({
-        conversation: {
-          id: conversationDoc.id,
-          ...conversationDoc.data()
-        },
-        messages
-      });
+      res.json({ conversation: { id: doc.id, ...doc.data() } });
     }
   } catch (error) {
     console.error('Error getting conversation:', error);
@@ -178,24 +125,27 @@ router.get('/:id', verifyToken, async (req, res) => {
 router.post('/', verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid || req.user.id;
-    const { title, agentId, metadata = {} } = req.body;
+    const { title, description } = req.body;
+    
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
     
     // Check if using Supabase
     const useSupabase = process.env.USE_SUPABASE === 'true';
     
     if (useSupabase) {
-      if (!isSupabaseInitialized()) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
         return res.status(500).json({ error: "Supabase client not initialized" });
       }
-      
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
+      const { data, error } = await getSupabaseClient()
         .from('conversations')
         .insert({
           user_id: userId,
-          title: title || 'New Conversation',
-          agent_id: agentId,
-          metadata,
+          title,
+          description,
+          messages: [],
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -208,20 +158,11 @@ router.post('/', verifyToken, async (req, res) => {
       
       res.status(201).json({ conversation: data });
     } else {
-      // Check if Firebase is initialized
-      const refs = getFirestoreRefs();
-      if (!refs) {
-        return res.status(500).json({ error: "Firebase not initialized" });
-      }
-      
-      const { conversationsRef } = refs;
-      const admin = getFirebaseAdmin();
-      
       const conversationData = {
         userId,
-        title: title || 'New Conversation',
-        agentId,
-        metadata,
+        title,
+        description,
+        messages: [],
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
@@ -245,20 +186,18 @@ router.put('/:id', verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid || req.user.id;
     const conversationId = req.params.id;
-    const { title, metadata } = req.body;
+    const { title, description } = req.body;
     
     // Check if using Supabase
     const useSupabase = process.env.USE_SUPABASE === 'true';
     
     if (useSupabase) {
-      if (!isSupabaseInitialized()) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
         return res.status(500).json({ error: "Supabase client not initialized" });
       }
-      
-      const supabase = getSupabaseClient();
-      
       // First check if conversation exists and belongs to user
-      const { data: existingConversation, error: fetchError } = await supabase
+      const { data: existingConversation, error: fetchError } = await getSupabaseClient()
         .from('conversations')
         .select('*')
         .eq('id', conversationId)
@@ -270,14 +209,12 @@ router.put('/:id', verifyToken, async (req, res) => {
       }
       
       // Update the conversation
-      const updateData = {
-        updated_at: new Date().toISOString()
-      };
-      
+      const updateData = {};
       if (title !== undefined) updateData.title = title;
-      if (metadata !== undefined) updateData.metadata = metadata;
+      if (description !== undefined) updateData.description = description;
+      updateData.updated_at = new Date().toISOString();
       
-      const { data, error } = await supabase
+      const { data, error } = await getSupabaseClient()
         .from('conversations')
         .update(updateData)
         .eq('id', conversationId)
@@ -291,15 +228,6 @@ router.put('/:id', verifyToken, async (req, res) => {
       
       res.json({ conversation: data });
     } else {
-      // Check if Firebase is initialized
-      const refs = getFirestoreRefs();
-      if (!refs) {
-        return res.status(500).json({ error: "Firebase not initialized" });
-      }
-      
-      const { conversationsRef } = refs;
-      const admin = getFirebaseAdmin();
-      
       // First check if conversation exists and belongs to user
       const doc = await conversationsRef.doc(conversationId).get();
       
@@ -308,12 +236,10 @@ router.put('/:id', verifyToken, async (req, res) => {
       }
       
       // Update the conversation
-      const updateData = {
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-      
+      const updateData = {};
       if (title !== undefined) updateData.title = title;
-      if (metadata !== undefined) updateData.metadata = metadata;
+      if (description !== undefined) updateData.description = description;
+      updateData.updatedAt = admin.firestore.FieldValue.serverTimestamp();
       
       await conversationsRef.doc(conversationId).update(updateData);
       
@@ -340,14 +266,12 @@ router.delete('/:id', verifyToken, async (req, res) => {
     const useSupabase = process.env.USE_SUPABASE === 'true';
     
     if (useSupabase) {
-      if (!isSupabaseInitialized()) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
         return res.status(500).json({ error: "Supabase client not initialized" });
       }
-      
-      const supabase = getSupabaseClient();
-      
       // First check if conversation exists and belongs to user
-      const { data: existingConversation, error: fetchError } = await supabase
+      const { data: existingConversation, error: fetchError } = await getSupabaseClient()
         .from('conversations')
         .select('*')
         .eq('id', conversationId)
@@ -358,18 +282,8 @@ router.delete('/:id', verifyToken, async (req, res) => {
         return res.status(404).json({ error: 'Conversation not found' });
       }
       
-      // Delete all messages in the conversation
-      const { error: messagesError } = await supabase
-        .from('messages')
-        .delete()
-        .eq('conversation_id', conversationId);
-      
-      if (messagesError) {
-        throw messagesError;
-      }
-      
       // Delete the conversation
-      const { error } = await supabase
+      const { error } = await getSupabaseClient()
         .from('conversations')
         .delete()
         .eq('id', conversationId)
@@ -381,14 +295,6 @@ router.delete('/:id', verifyToken, async (req, res) => {
       
       res.json({ success: true });
     } else {
-      // Check if Firebase is initialized
-      const refs = getFirestoreRefs();
-      if (!refs) {
-        return res.status(500).json({ error: "Firebase not initialized" });
-      }
-      
-      const { conversationsRef, messagesRef } = refs;
-      
       // First check if conversation exists and belongs to user
       const doc = await conversationsRef.doc(conversationId).get();
       
@@ -396,20 +302,8 @@ router.delete('/:id', verifyToken, async (req, res) => {
         return res.status(404).json({ error: 'Conversation not found' });
       }
       
-      // Delete all messages in the conversation
-      const messagesSnapshot = await messagesRef
-        .where('conversationId', '==', conversationId)
-        .get();
-      
-      const batch = getFirestore().batch();
-      messagesSnapshot.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      
       // Delete the conversation
-      batch.delete(conversationsRef.doc(conversationId));
-      
-      await batch.commit();
+      await conversationsRef.doc(conversationId).delete();
       
       res.json({ success: true });
     }
@@ -429,22 +323,20 @@ router.post('/:id/messages', verifyToken, async (req, res) => {
     const conversationId = req.params.id;
     const { content, role, metadata = {} } = req.body;
     
-    if (!content) {
-      return res.status(400).json({ error: 'Message content is required' });
+    if (!content || !role) {
+      return res.status(400).json({ error: 'Content and role are required' });
     }
     
     // Check if using Supabase
     const useSupabase = process.env.USE_SUPABASE === 'true';
     
     if (useSupabase) {
-      if (!isSupabaseInitialized()) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
         return res.status(500).json({ error: "Supabase client not initialized" });
       }
-      
-      const supabase = getSupabaseClient();
-      
       // First check if conversation exists and belongs to user
-      const { data: existingConversation, error: fetchError } = await supabase
+      const { data: existingConversation, error: fetchError } = await getSupabaseClient()
         .from('conversations')
         .select('*')
         .eq('id', conversationId)
@@ -455,82 +347,155 @@ router.post('/:id/messages', verifyToken, async (req, res) => {
         return res.status(404).json({ error: 'Conversation not found' });
       }
       
-      // Add the message
-      const { data: message, error: messageError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          content,
-          role: role || 'user',
-          metadata,
-          created_at: new Date().toISOString()
+      // Add message to conversation
+      const message = {
+        id: uuidv4(),
+        content,
+        role,
+        metadata,
+        timestamp: new Date().toISOString()
+      };
+      
+      const messages = [...existingConversation.messages, message];
+      
+      const { data, error } = await getSupabaseClient()
+        .from('conversations')
+        .update({
+          messages,
+          updated_at: new Date().toISOString()
         })
+        .eq('id', conversationId)
+        .eq('user_id', userId)
         .select()
         .single();
       
-      if (messageError) {
-        throw messageError;
+      if (error) {
+        throw error;
       }
       
-      // Update conversation's updatedAt
-      const { error: updateError } = await supabase
-        .from('conversations')
-        .update({
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', conversationId);
-      
-      if (updateError) {
-        throw updateError;
-      }
-      
-      res.status(201).json({ message });
+      res.json({ message, conversation: data });
     } else {
-      // Check if Firebase is initialized
-      const refs = getFirestoreRefs();
-      if (!refs) {
-        return res.status(500).json({ error: "Firebase not initialized" });
-      }
-      
-      const { conversationsRef, messagesRef } = refs;
-      const admin = getFirebaseAdmin();
-      
       // First check if conversation exists and belongs to user
-      const conversationDoc = await conversationsRef.doc(conversationId).get();
+      const doc = await conversationsRef.doc(conversationId).get();
       
-      if (!conversationDoc.exists || conversationDoc.data().userId !== userId) {
+      if (!doc.exists || doc.data().userId !== userId) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
       
-      // Add the message
-      const messageData = {
-        conversationId,
+      // Add message to conversation
+      const message = {
+        id: uuidv4(),
         content,
-        role: role || 'user',
+        role,
         metadata,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: new Date().toISOString()
       };
       
-      const batch = getFirestore().batch();
+      const conversationData = doc.data();
+      const messages = [...conversationData.messages, message];
       
-      // Add message
-      const messageRef = messagesRef.doc();
-      batch.set(messageRef, messageData);
-      
-      // Update conversation's updatedAt
-      batch.update(conversationsRef.doc(conversationId), {
+      await conversationsRef.doc(conversationId).update({
+        messages,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       
-      await batch.commit();
+      const updatedDoc = await conversationsRef.doc(conversationId).get();
       
-      const messageDoc = await messageRef.get();
-      
-      res.status(201).json({ message: { id: messageDoc.id, ...messageDoc.data() } });
+      res.json({
+        message,
+        conversation: { id: updatedDoc.id, ...updatedDoc.data() }
+      });
     }
   } catch (error) {
     console.error('Error adding message:', error);
     res.status(500).json({ error: 'Failed to add message' });
+  }
+});
+
+/**
+ * Delete a message from a conversation
+ * @route DELETE /api/conversations/:id/messages/:messageId
+ */
+router.delete('/:id/messages/:messageId', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid || req.user.id;
+    const conversationId = req.params.id;
+    const messageId = req.params.messageId;
+    
+    // Check if using Supabase
+    const useSupabase = process.env.USE_SUPABASE === 'true';
+    
+    if (useSupabase) {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        return res.status(500).json({ error: "Supabase client not initialized" });
+      }
+      // First check if conversation exists and belongs to user
+      const { data: existingConversation, error: fetchError } = await getSupabaseClient()
+        .from('conversations')
+        .select('*')
+        .eq('id', conversationId)
+        .eq('user_id', userId)
+        .single();
+      
+      if (fetchError || !existingConversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+      
+      // Remove message from conversation
+      const messages = existingConversation.messages.filter(m => m.id !== messageId);
+      
+      if (messages.length === existingConversation.messages.length) {
+        return res.status(404).json({ error: 'Message not found' });
+      }
+      
+      const { data, error } = await getSupabaseClient()
+        .from('conversations')
+        .update({
+          messages,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      
+      if (error) {
+        throw error;
+      }
+      
+      res.json({ success: true, conversation: data });
+    } else {
+      // First check if conversation exists and belongs to user
+      const doc = await conversationsRef.doc(conversationId).get();
+      
+      if (!doc.exists || doc.data().userId !== userId) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+      
+      // Remove message from conversation
+      const conversationData = doc.data();
+      const messages = conversationData.messages.filter(m => m.id !== messageId);
+      
+      if (messages.length === conversationData.messages.length) {
+        return res.status(404).json({ error: 'Message not found' });
+      }
+      
+      await conversationsRef.doc(conversationId).update({
+        messages,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      const updatedDoc = await conversationsRef.doc(conversationId).get();
+      
+      res.json({
+        success: true,
+        conversation: { id: updatedDoc.id, ...updatedDoc.data() }
+      });
+    }
+  } catch (error) {
+    console.error('Error deleting message:', error);
+    res.status(500).json({ error: 'Failed to delete message' });
   }
 });
 
