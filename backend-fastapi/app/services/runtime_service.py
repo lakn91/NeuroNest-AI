@@ -1,12 +1,20 @@
+"""
+Runtime Service - Provides runtime environment management for code execution
+"""
+
 import os
 import uuid
 import logging
 import asyncio
 import docker
 import json
-from typing import Dict, List, Optional, Any
+import io
+import tarfile
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 import aiofiles
+
+from app.core.config import settings
 from app.models.execution import RuntimeEnvironment, RuntimeStatus, RuntimeLog
 from app.services.docker_service import DockerService
 from app.services.file_service import FileService
@@ -19,15 +27,34 @@ class RuntimeService:
     """
     
     def __init__(self):
+        self.logger = logger
         self.docker_service = DockerService()
         self.file_service = FileService()
-        self.runtime_base_path = os.path.join(os.getcwd(), "static", "runtimes")
+        
+        # Initialize Docker client if code execution is enabled
+        self.docker_client = None
+        if settings.ENABLE_CODE_EXECUTION:
+            self._init_docker_client()
+        
+        # Set up runtime paths
+        self.runtime_base_path = settings.PROJECTS_DIR
         os.makedirs(self.runtime_base_path, exist_ok=True)
         
         # In-memory storage for runtime metadata
         # In a production environment, this would be stored in a database
         self.runtimes = {}
         self.runtime_logs = {}
+    
+    def _init_docker_client(self):
+        """
+        Initialize the Docker client
+        """
+        try:
+            self.docker_client = docker.from_env()
+            self.logger.info("Docker client initialized")
+        except Exception as e:
+            self.logger.error(f"Error initializing Docker client: {e}")
+            raise ValueError(f"Failed to initialize Docker client: {str(e)}")
     
     async def create_runtime(
         self,
@@ -350,3 +377,32 @@ class RuntimeService:
             return f"php {entry_point}"
         else:
             return f"sh {entry_point}"
+    
+    async def close(self):
+        """
+        Close the runtime service
+        """
+        try:
+            # Stop all running containers
+            for runtime_id, runtime in self.runtimes.items():
+                if runtime.status == "running" and runtime.container_id:
+                    try:
+                        await self.stop_runtime(runtime_id)
+                        self.logger.info(f"Runtime {runtime_id} stopped during shutdown")
+                    except Exception as e:
+                        self.logger.error(f"Error stopping runtime {runtime_id} during shutdown: {e}")
+            
+            # Close Docker client
+            if self.docker_client:
+                self.docker_client.close()
+                self.docker_client = None
+                self.logger.info("Docker client closed")
+            
+            # Close Docker service
+            if hasattr(self.docker_service, 'close'):
+                await self.docker_service.close()
+                self.logger.info("Docker service closed")
+            
+            self.logger.info("Runtime service closed")
+        except Exception as e:
+            self.logger.error(f"Error closing runtime service: {e}")

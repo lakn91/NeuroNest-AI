@@ -9,26 +9,38 @@ import json
 import uuid
 import os
 import logging
-
+from app.core.config import settings
 from app.database.supabase_client import get_supabase_client
 
 # Import LangChain and Chroma components
 try:
     import chromadb
+    from chromadb.config import Settings as ChromaSettings
     from langchain.vectorstores import Chroma
-    from langchain.embeddings import OpenAIEmbedding
+    from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
     from langchain.schema import Document
     from langchain.memory import VectorStoreRetrieverMemory
-    from langchain.memory import ConversationBufferMemory
+    from langchain.memory import ConversationBufferMemory, ConversationBufferWindowMemory
     
     # Initialize Chroma client
-    CHROMA_PERSIST_DIRECTORY = os.path.join(os.getcwd(), "static", "chroma_db")
+    CHROMA_PERSIST_DIRECTORY = settings.VECTOR_DB_PATH
     os.makedirs(CHROMA_PERSIST_DIRECTORY, exist_ok=True)
     
-    chroma_client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIRECTORY)
+    chroma_client = chromadb.PersistentClient(
+        path=CHROMA_PERSIST_DIRECTORY,
+        settings=ChromaSettings(
+            anonymized_telemetry=False
+        )
+    )
     
     # Initialize embedding function
-    embedding_function = OpenAIEmbedding()
+    if settings.OPENAI_API_KEY:
+        embedding_function = OpenAIEmbeddings()
+    else:
+        # Use HuggingFace embeddings as fallback
+        embedding_function = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-mpnet-base-v2"
+        )
     
     # Flag to indicate that vector memory is available
     VECTOR_MEMORY_AVAILABLE = True
@@ -40,6 +52,7 @@ class MemoryService:
     def __init__(self):
         """Initialize the memory service"""
         self.supabase = get_supabase_client()
+        self.logger = logging.getLogger(__name__)
         
         # Initialize vector store if available
         if VECTOR_MEMORY_AVAILABLE:
@@ -50,10 +63,11 @@ class MemoryService:
         # Create default collection if it doesn't exist
         try:
             self.default_collection = chroma_client.get_or_create_collection(
-                name="agent_memories"
+                name=settings.VECTOR_DB_COLLECTION
             )
+            self.logger.info(f"Vector store initialized with collection: {settings.VECTOR_DB_COLLECTION}")
         except Exception as e:
-            logging.error(f"Error initializing vector store: {str(e)}")
+            self.logger.error(f"Error initializing vector store: {str(e)}")
             self.default_collection = None
     
     async def create_memory(
@@ -416,7 +430,9 @@ class MemoryService:
         self,
         user_id: str,
         agent_id: str,
-        memory_key: str = "chat_history"
+        memory_key: str = "chat_history",
+        memory_type: str = None,
+        k: int = 5
     ):
         """
         Get a LangChain memory object for an agent
@@ -425,13 +441,35 @@ class MemoryService:
             user_id: User ID
             agent_id: Agent ID
             memory_key: Memory key for the LangChain memory
+            memory_type: Type of memory (buffer, buffer_window, vector)
+            k: Number of messages to keep in window memory
             
         Returns:
             LangChain memory object
         """
-        if not VECTOR_MEMORY_AVAILABLE:
-            # Fallback to conversation buffer memory
-            return ConversationBufferMemory(memory_key=memory_key)
+        # Use settings if memory_type not provided
+        if memory_type is None:
+            memory_type = settings.LANGCHAIN_MEMORY_TYPE
+            
+        # Use settings if k not provided
+        if k == 5 and hasattr(settings, 'LANGCHAIN_MEMORY_K'):
+            k = settings.LANGCHAIN_MEMORY_K
+        
+        # If vector memory is not available or not requested, use buffer memory
+        if not VECTOR_MEMORY_AVAILABLE or memory_type != "vector":
+            if memory_type == "buffer_window":
+                self.logger.info(f"Creating buffer window memory with k={k}")
+                return ConversationBufferWindowMemory(
+                    memory_key=memory_key,
+                    k=k,
+                    return_messages=True
+                )
+            else:
+                self.logger.info("Creating buffer memory")
+                return ConversationBufferMemory(
+                    memory_key=memory_key,
+                    return_messages=True
+                )
         
         try:
             # Create a collection for this specific agent
@@ -449,23 +487,46 @@ class MemoryService:
             
             # Create retriever
             retriever = vectorstore.as_retriever(
-                search_kwargs={"k": 5}
+                search_kwargs={"k": k}
             )
             
             # Create memory
             memory = VectorStoreRetrieverMemory(
                 retriever=retriever,
-                memory_key=memory_key
+                memory_key=memory_key,
+                return_messages=True
             )
             
+            self.logger.info(f"Created vector memory for agent {agent_id}")
             return memory
         except Exception as e:
-            logging.error(f"Error creating LangChain memory: {str(e)}")
+            self.logger.error(f"Error creating LangChain memory: {str(e)}")
             # Fallback to conversation buffer memory
-            return ConversationBufferMemory(memory_key=memory_key)
+            return ConversationBufferMemory(
+                memory_key=memory_key,
+                return_messages=True
+            )
 
 # Create a singleton instance
 memory_service = MemoryService()
+
+# Add close method to the class
+async def close(self):
+    """
+    Close the vector database connection
+    """
+    try:
+        # No explicit close method for Chroma client in chromadb
+        # But we can reset the client
+        global chroma_client
+        chroma_client = None
+        self.default_collection = None
+        self.logger.info("Memory service connections closed")
+    except Exception as e:
+        self.logger.error(f"Error closing memory service connections: {e}")
+
+# Add the close method to the class
+MemoryService.close = close
 
 # Legacy function wrappers for backward compatibility
 async def create_memory(

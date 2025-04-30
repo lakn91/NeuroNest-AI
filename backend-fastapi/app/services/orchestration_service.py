@@ -1,18 +1,37 @@
+"""
+Orchestration Service - Provides agent orchestration and task coordination
+"""
+
 import uuid
 import logging
 import asyncio
 import json
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Union
 from datetime import datetime
-from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_openai import ChatOpenAI
-from langchain.tools import BaseTool
-from langchain.memory import ConversationBufferMemory
+
+from app.core.config import settings
 from app.services.agent_service import AgentService
 from app.services.memory_service import MemoryService
 from app.services.agent_tools import get_tool_by_name
+from app.services.document_index_service import DocumentIndexService
+from app.services.code_analysis_service import CodeAnalysisService
+
+# Import LangChain components
+try:
+    from langchain.agents import AgentExecutor, create_openai_tools_agent
+    from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+    from langchain_openai import ChatOpenAI
+    from langchain.tools import BaseTool, Tool
+    from langchain.memory import ConversationBufferMemory, ConversationBufferWindowMemory
+    from langchain.callbacks.manager import CallbackManager
+    from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+    
+    # Flag to indicate that LangChain is available
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
+    logging.warning("LangChain components not available. Agent orchestration will be limited.")
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +41,83 @@ class OrchestrationService:
     """
     
     def __init__(self):
+        self.logger = logger
         self.agent_service = AgentService()
         self.memory_service = MemoryService()
+        self.document_index_service = DocumentIndexService()
+        self.code_analysis_service = CodeAnalysisService()
+        
+        # Initialize LangChain components if available
+        if LANGCHAIN_AVAILABLE:
+            self._init_langchain()
         
         # In-memory storage for task and workflow metadata
         # In a production environment, this would be stored in a database
         self.tasks = {}
         self.workflows = {}
         self.agents = {}
+    
+    def _init_langchain(self):
+        """
+        Initialize LangChain components
+        """
+        try:
+            # Initialize LLM based on available API keys
+            if settings.OPENAI_API_KEY:
+                self.llm = ChatOpenAI(
+                    model="gpt-4",
+                    temperature=settings.AGENT_TEMPERATURE,
+                    max_tokens=settings.AGENT_MAX_TOKENS,
+                    streaming=True,
+                    verbose=settings.LANGCHAIN_VERBOSE,
+                    callback_manager=CallbackManager([StreamingStdOutCallbackHandler()])
+                )
+                self.logger.info("Using OpenAI for agent orchestration")
+            elif settings.ANTHROPIC_API_KEY:
+                self.llm = ChatAnthropic(
+                    model="claude-2",
+                    temperature=settings.AGENT_TEMPERATURE,
+                    max_tokens=settings.AGENT_MAX_TOKENS,
+                    streaming=True,
+                    verbose=settings.LANGCHAIN_VERBOSE,
+                    callback_manager=CallbackManager([StreamingStdOutCallbackHandler()])
+                )
+                self.logger.info("Using Anthropic for agent orchestration")
+            else:
+                self.logger.warning("No LLM API keys available. Agent orchestration will be limited.")
+                self.llm = None
+            
+            # Initialize tools
+            self._init_tools()
+            
+            self.logger.info("LangChain components initialized")
+        except Exception as e:
+            self.logger.error(f"Error initializing LangChain components: {e}")
+            self.llm = None
+    
+    def _init_tools(self):
+        """
+        Initialize LangChain tools
+        """
+        try:
+            # Define basic tools
+            self.tools = [
+                Tool(
+                    name="Search",
+                    func=self._search_documents,
+                    description="Search for information in indexed documents. Input should be a search query."
+                ),
+                Tool(
+                    name="CodeAnalysis",
+                    func=self._analyze_code,
+                    description="Analyze code for issues and improvements. Input should be code as a string."
+                )
+            ]
+            
+            self.logger.info(f"Initialized {len(self.tools)} LangChain tools")
+        except Exception as e:
+            self.logger.error(f"Error initializing tools: {e}")
+            self.tools = []
     
     async def create_task(
         self,
@@ -449,40 +537,135 @@ class OrchestrationService:
     def _get_system_message_for_task_type(self, task_type: str) -> str:
         """
         Get the system message for a task type
+        
+        Args:
+            task_type: Task type
+            
+        Returns:
+            System message
         """
+        # Define system messages for different task types
         system_messages = {
-            "thinking": """You are a Thinking Agent that analyzes problems, creates execution plans, and provides reasoning.
-            Your role is to break down complex requests into actionable steps, identify potential challenges, and suggest approaches.
-            You should think step-by-step and provide clear, logical reasoning for your conclusions.""",
+            "thinking": """You are a thinking agent that excels at analysis, reasoning, and planning.
+                Your goal is to carefully analyze the given task and provide thoughtful insights and solutions.
+                Think step by step and consider multiple perspectives before reaching a conclusion.""",
             
-            "coding": """You are a Developer Agent that generates high-quality code based on specifications.
-            Your role is to write clean, efficient, and well-documented code that meets the requirements.
-            You should follow best practices for the language and framework being used.""",
+            "coding": """You are a developer agent that excels at writing clean, efficient code.
+                Your goal is to implement the requested functionality with high-quality code that follows best practices.
+                Consider edge cases, performance, and maintainability in your solutions.""",
             
-            "frontend": """You are a Frontend Developer Agent that specializes in creating user interfaces.
-            Your role is to write HTML, CSS, and JavaScript code that creates responsive, accessible, and visually appealing UIs.
-            You should follow modern frontend development practices and ensure cross-browser compatibility.""",
+            "frontend": """You are a frontend developer agent that excels at creating user interfaces.
+                Your goal is to implement the requested UI components with clean HTML, CSS, and JavaScript.
+                Focus on user experience, accessibility, and responsive design.""",
             
-            "backend": """You are a Backend Developer Agent that specializes in server-side logic and APIs.
-            Your role is to design and implement robust, scalable, and secure backend systems.
-            You should follow best practices for API design, database interactions, and error handling.""",
+            "backend": """You are a backend developer agent that excels at building server-side applications.
+                Your goal is to implement robust APIs, database interactions, and business logic.
+                Focus on security, scalability, and performance.""",
             
-            "review": """You are an Editor Agent that reviews and improves code.
-            Your role is to identify bugs, inefficiencies, and areas for improvement in code.
-            You should suggest specific changes to enhance code quality, performance, and maintainability.""",
+            "review": """You are an editor agent that excels at reviewing and improving code.
+                Your goal is to identify issues, suggest improvements, and ensure code quality.
+                Look for bugs, performance issues, security vulnerabilities, and maintainability concerns.""",
             
-            "execution": """You are an Execution Agent that runs and tests code.
-            Your role is to set up environments, install dependencies, and execute code to verify its functionality.
-            You should provide detailed feedback on execution results and troubleshoot any issues.""",
+            "execution": """You are an execution agent that excels at running and testing code.
+                Your goal is to execute the given code, analyze the results, and provide feedback.
+                Look for errors, unexpected behavior, and performance issues.""",
             
-            "conversation": """You are a Conversation Agent that provides helpful responses to user queries.
-            Your role is to understand the user's intent and provide clear, accurate, and relevant information.
-            You should be friendly, concise, and focus on addressing the user's needs.""",
+            "conversation": """You are a conversation agent that excels at providing helpful responses.
+                Your goal is to understand the user's query and provide a clear, accurate, and helpful response.
+                Be friendly, concise, and informative.""",
             
-            "research": """You are a Research Agent that gathers and synthesizes information.
-            Your role is to find relevant information from various sources and present it in a structured format.
-            You should verify facts, cite sources, and provide comprehensive answers to research questions.""",
+            "research": """You are a research agent that excels at gathering and synthesizing information.
+                Your goal is to find relevant information on the given topic and present it in a clear, organized manner.
+                Cite sources and provide comprehensive coverage of the topic.""",
             
+            "planning": """You are a planning agent that excels at project planning and management.
+                Your goal is to break down complex tasks into manageable steps and create a clear plan of action.
+                Consider dependencies, timelines, and resource constraints."""
+        }
+        
+        # Return the system message for the task type, or a default message
+        return system_messages.get(
+            task_type,
+            """You are a helpful AI assistant. Your goal is to complete the given task to the best of your ability.
+            Think carefully and provide a high-quality response."""
+        )
+    
+    def _search_documents(self, query: str) -> str:
+        """
+        Search documents (LangChain tool)
+        
+        Args:
+            query: Search query
+            
+        Returns:
+            Search results as a string
+        """
+        try:
+            # This is a synchronous function for LangChain tools
+            # In a real implementation, you would use a synchronous version of the search
+            loop = asyncio.get_event_loop()
+            results = loop.run_until_complete(
+                self.document_index_service.search("default", query, limit=3)
+            )
+            
+            if not results:
+                return "No results found."
+            
+            # Format results
+            formatted_results = []
+            for i, result in enumerate(results):
+                formatted_results.append(f"{i+1}. {result['text']}")
+            
+            return "\n\n".join(formatted_results)
+        except Exception as e:
+            self.logger.error(f"Error searching documents: {e}")
+            return f"Error searching documents: {str(e)}"
+    
+    def _analyze_code(self, code: str) -> str:
+        """
+        Analyze code (LangChain tool)
+        
+        Args:
+            code: Code to analyze
+            
+        Returns:
+            Analysis results as a string
+        """
+        try:
+            # This is a synchronous function for LangChain tools
+            # In a real implementation, you would use a synchronous version of the analysis
+            loop = asyncio.get_event_loop()
+            result = loop.run_until_complete(
+                self.code_analysis_service.analyze_code(code)
+            )
+            
+            # Format result
+            if isinstance(result, dict):
+                formatted_result = json.dumps(result, indent=2)
+            else:
+                formatted_result = str(result)
+            
+            return formatted_result
+        except Exception as e:
+            self.logger.error(f"Error analyzing code: {e}")
+            return f"Error analyzing code: {str(e)}"
+    
+    async def close(self):
+        """
+        Close the orchestration service
+        """
+        try:
+            # Close document index service
+            if hasattr(self.document_index_service, 'close'):
+                await self.document_index_service.close()
+            
+            # Close memory service
+            if hasattr(self.memory_service, 'close'):
+                await self.memory_service.close()
+            
+            self.logger.info("Orchestration service closed")
+        except Exception as e:
+            self.logger.error(f"Error closing orchestration service: {e}")
             "planning": """You are a Planning Agent that helps organize projects and tasks.
             Your role is to create structured plans, timelines, and task breakdowns for projects.
             You should consider dependencies, priorities, and resource constraints in your planning."""
