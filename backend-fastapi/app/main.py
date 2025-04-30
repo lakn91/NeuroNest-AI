@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Import API routers
 from app.api.routes import agents, auth, projects, execution, files, settings, speech
 from app.api.routes import github, code_analysis, sandbox, langchain_agent, memory, conversation
-from app.api.routes import runtime, orchestration
+from app.api.routes import runtime, orchestration, document_index
 
 # Create FastAPI app
 app = FastAPI(
@@ -64,6 +64,7 @@ app.include_router(conversation.router, prefix="/api/conversation", tags=["Conve
 app.include_router(speech.router, prefix="/api/speech", tags=["Speech"])
 app.include_router(runtime.router, prefix="/api/runtime", tags=["Runtime"])
 app.include_router(orchestration.router, prefix="/api/orchestration", tags=["Orchestration"])
+app.include_router(document_index.router, prefix="/api/document-index", tags=["Document Index"])
 
 # Mount static files for project outputs
 os.makedirs("./static/projects", exist_ok=True)
@@ -83,6 +84,8 @@ def shutdown_event():
         from app.services.github_service import github_service
         from app.services.langchain_agent_service import langchain_agent_service
         from app.services.runtime_service import RuntimeService
+        from app.services.orchestration_service import OrchestrationService
+        from app.services.document_index_service import DocumentIndexService
         
         docker_sandbox_service.cleanup()
         github_service.cleanup()
@@ -91,6 +94,10 @@ def shutdown_event():
         # Cleanup runtime service
         runtime_service = RuntimeService()
         runtime_service.cleanup_old_runtimes()
+        
+        # Log shutdown of other services
+        logger.info("Shutting down orchestration service")
+        logger.info("Shutting down document index service")
     except Exception as e:
         logger.error(f"Error during cleanup: {e}", exc_info=True)
 
