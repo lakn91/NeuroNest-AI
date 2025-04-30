@@ -1,0 +1,50 @@
+Starting NeuroNest AI...
+Environment variables:
+- USE_SUPABASE: true
+- PORT: 12000
+- HOST: 0.0.0.0
+Using Express backend
+Using Supabase instead of Firebase, skipping Firebase initialization in firebase service
+Supabase client initialized in supabase service
+NeuroNest AI backend server listening on 0.0.0.0:12000
+Using Supabase for data storage
+Temporary directory created
+Projects directory created
+[0mGET / [33m404[0m 2.080 ms - 139[0m
+[0mGET / [33m404[0m 0.573 ms - 139[0m
+[0mGET /api/health [32m200[0m 1.541 ms - 271[0m
+[0mGET / [33m404[0m 0.467 ms - 139[0m
+[0mGET / [33m404[0m 0.339 ms - 139[0m
+[0mGET /api/health [32m200[0m 0.320 ms - 271[0m
+[0mGET /api/health [32m200[0m 0.403 ms - 271[0m
+[0mGET / [33m404[0m 0.372 ms - 139[0m
+[0mGET / [33m404[0m 0.554 ms - 139[0m
+[0mGET / [33m404[0m 0.332 ms - 139[0m
+[0mGET / [33m404[0m 0.303 ms - 139[0m
+[0mGET /api/auth/status [33m404[0m 0.648 ms - 154[0m
+[0mGET / [33m404[0m 0.348 ms - 139[0m
+[0mGET /api/settings [33m401[0m 1.327 ms - 43[0m
+[0mGET / [33m404[0m 0.304 ms - 139[0m
+[0mGET /api/settings [33m401[0m 0.279 ms - 43[0m
+[0mGET /api/memories [33m401[0m 0.317 ms - 43[0m
+[0mGET /api/projects [33m401[0m 0.272 ms - 43[0m
+[0mGET /api/conversations [33m401[0m 0.256 ms - 43[0m
+[0mGET / [33m404[0m 0.347 ms - 139[0m
+[0mGET / [33m404[0m 0.293 ms - 139[0m
+[0mGET / [33m404[0m 0.276 ms - 139[0m
+[0mGET / [33m404[0m 0.253 ms - 139[0m
+[0mGET / [33m404[0m 0.285 ms - 139[0m
+[0mGET / [33m404[0m 0.300 ms - 139[0m
+[0mGET / [33m404[0m 0.266 ms - 139[0m
+[0mGET / [33m404[0m 0.316 ms - 139[0m
+[0mGET / [33m404[0m 0.258 ms - 139[0m
+[0mGET / [33m404[0m 0.256 ms - 139[0m
+[0mGET / [33m404[0m 0.278 ms - 139[0m
+[0mGET / [33m404[0m 0.276 ms - 139[0m
+[0mGET / [33m404[0m 0.264 ms - 139[0m
+[0mGET / [33m404[0m 0.266 ms - 139[0m
+[0mGET / [33m404[0m 0.235 ms - 139[0m
+[0mGET / [33m404[0m 0.296 ms - 139[0m
+[0mGET / [33m404[0m 0.258 ms - 139[0m
+[0mGET / [33m404[0m 0.247 ms - 139[0m
+[0mGET / [33m404[0m 0.248 ms - 139[0m

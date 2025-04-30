@@ -5,11 +5,11 @@
 
 const express = require('express');
 const router = express.Router();
-const path = require('path');
 const fs = require('fs').promises;
+const path = require('path');
 
 const { verifyToken } = require('./auth');
-const { getFirebaseAdmin, getFirestore, isFirebaseInitialized } = require('../services/firebase');
+const { getFirebaseAdmin, getFirestore, getStorageBucket, isFirebaseInitialized } = require('../services/firebase');
 const { getSupabaseClient, isSupabaseInitialized } = require('../services/supabase');
 
 // Function to get Firestore references
@@ -24,11 +24,18 @@ const getFirestoreRefs = () => {
   };
 };
 
-// Create projects directory if it doesn't exist
-const projectsDir = path.join(__dirname, '..', 'projects');
-fs.mkdir(projectsDir, { recursive: true })
-  .then(() => console.log('Projects directory created'))
-  .catch(error => console.error('Error creating projects directory:', error));
+// Projects directory for code storage
+const PROJECTS_DIR = process.env.PROJECTS_DIR || path.join(__dirname, '..', 'projects');
+
+// Ensure projects directory exists
+(async () => {
+  try {
+    await fs.mkdir(PROJECTS_DIR, { recursive: true });
+    console.log(`Projects directory created at ${PROJECTS_DIR}`);
+  } catch (error) {
+    console.error('Error creating projects directory:', error);
+  }
+})();
 
 /**
  * Get all projects for a user
@@ -66,7 +73,6 @@ router.get('/', verifyToken, async (req, res) => {
       }
       
       const { projectsRef } = refs;
-      
       const snapshot = await projectsRef
         .where('userId', '==', userId)
         .orderBy('createdAt', 'desc')
@@ -126,7 +132,6 @@ router.get('/:id', verifyToken, async (req, res) => {
       }
       
       const { projectsRef } = refs;
-      
       const doc = await projectsRef.doc(projectId).get();
       
       if (!doc.exists || doc.data().userId !== userId) {
@@ -148,7 +153,7 @@ router.get('/:id', verifyToken, async (req, res) => {
 router.post('/', verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid || req.user.id;
-    const { name, description, type, settings = {} } = req.body;
+    const { name, description, type, language, framework, template } = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Project name is required' });
@@ -168,9 +173,11 @@ router.post('/', verifyToken, async (req, res) => {
         .insert({
           user_id: userId,
           name,
-          description,
-          type: type || 'default',
-          settings,
+          description: description || '',
+          type: type || 'web',
+          language: language || 'javascript',
+          framework: framework || 'react',
+          template: template || 'default',
           status: 'active',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -183,7 +190,7 @@ router.post('/', verifyToken, async (req, res) => {
       }
       
       // Create project directory
-      const projectDir = path.join(projectsDir, data.id);
+      const projectDir = path.join(PROJECTS_DIR, data.id);
       await fs.mkdir(projectDir, { recursive: true });
       
       res.status(201).json({ project: data });
@@ -200,9 +207,11 @@ router.post('/', verifyToken, async (req, res) => {
       const projectData = {
         userId,
         name,
-        description,
-        type: type || 'default',
-        settings,
+        description: description || '',
+        type: type || 'web',
+        language: language || 'javascript',
+        framework: framework || 'react',
+        template: template || 'default',
         status: 'active',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -212,7 +221,7 @@ router.post('/', verifyToken, async (req, res) => {
       const doc = await docRef.get();
       
       // Create project directory
-      const projectDir = path.join(projectsDir, doc.id);
+      const projectDir = path.join(PROJECTS_DIR, doc.id);
       await fs.mkdir(projectDir, { recursive: true });
       
       res.status(201).json({ project: { id: doc.id, ...doc.data() } });
@@ -231,7 +240,7 @@ router.put('/:id', verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid || req.user.id;
     const projectId = req.params.id;
-    const { name, description, type, settings, status } = req.body;
+    const { name, description, type, language, framework, status } = req.body;
     
     // Check if using Supabase
     const useSupabase = process.env.USE_SUPABASE === 'true';
@@ -242,7 +251,6 @@ router.put('/:id', verifyToken, async (req, res) => {
       }
       
       const supabase = getSupabaseClient();
-      
       // First check if project exists and belongs to user
       const { data: existingProject, error: fetchError } = await supabase
         .from('projects')
@@ -263,7 +271,8 @@ router.put('/:id', verifyToken, async (req, res) => {
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
       if (type !== undefined) updateData.type = type;
-      if (settings !== undefined) updateData.settings = settings;
+      if (language !== undefined) updateData.language = language;
+      if (framework !== undefined) updateData.framework = framework;
       if (status !== undefined) updateData.status = status;
       
       const { data, error } = await supabase
@@ -304,7 +313,8 @@ router.put('/:id', verifyToken, async (req, res) => {
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
       if (type !== undefined) updateData.type = type;
-      if (settings !== undefined) updateData.settings = settings;
+      if (language !== undefined) updateData.language = language;
+      if (framework !== undefined) updateData.framework = framework;
       if (status !== undefined) updateData.status = status;
       
       await projectsRef.doc(projectId).update(updateData);
@@ -337,7 +347,6 @@ router.delete('/:id', verifyToken, async (req, res) => {
       }
       
       const supabase = getSupabaseClient();
-      
       // First check if project exists and belongs to user
       const { data: existingProject, error: fetchError } = await supabase
         .from('projects')
@@ -363,10 +372,11 @@ router.delete('/:id', verifyToken, async (req, res) => {
       
       // Delete project directory
       try {
-        const projectDir = path.join(projectsDir, projectId);
+        const projectDir = path.join(PROJECTS_DIR, projectId);
         await fs.rm(projectDir, { recursive: true, force: true });
       } catch (fsError) {
-        console.error('Error deleting project directory:', fsError);
+        console.error(`Error deleting project directory for ${projectId}:`, fsError);
+        // Continue even if directory deletion fails
       }
       
       res.json({ success: true });
@@ -391,10 +401,11 @@ router.delete('/:id', verifyToken, async (req, res) => {
       
       // Delete project directory
       try {
-        const projectDir = path.join(projectsDir, projectId);
+        const projectDir = path.join(PROJECTS_DIR, projectId);
         await fs.rm(projectDir, { recursive: true, force: true });
       } catch (fsError) {
-        console.error('Error deleting project directory:', fsError);
+        console.error(`Error deleting project directory for ${projectId}:`, fsError);
+        // Continue even if directory deletion fails
       }
       
       res.json({ success: true });
@@ -402,6 +413,252 @@ router.delete('/:id', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting project:', error);
     res.status(500).json({ error: 'Failed to delete project' });
+  }
+});
+
+/**
+ * Get project files
+ * @route GET /api/projects/:id/files
+ */
+router.get('/:id/files', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid || req.user.id;
+    const projectId = req.params.id;
+    const { path: filePath = '' } = req.query;
+    
+    // Normalize and secure the file path
+    const normalizedPath = path.normalize(filePath).replace(/^(\.\.(\/|\\|$))+/, '');
+    const projectDir = path.join(PROJECTS_DIR, projectId);
+    const fullPath = path.join(projectDir, normalizedPath);
+    
+    // Check if project exists and belongs to user
+    const useSupabase = process.env.USE_SUPABASE === 'true';
+    
+    if (useSupabase) {
+      if (!isSupabaseInitialized()) {
+        return res.status(500).json({ error: "Supabase client not initialized" });
+      }
+      
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .single();
+      
+      if (error) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    } else {
+      // Check if Firebase is initialized
+      const refs = getFirestoreRefs();
+      if (!refs) {
+        return res.status(500).json({ error: "Firebase not initialized" });
+      }
+      
+      const { projectsRef } = refs;
+      const doc = await projectsRef.doc(projectId).get();
+      
+      if (!doc.exists || doc.data().userId !== userId) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    }
+    
+    // Check if path exists
+    try {
+      const stats = await fs.stat(fullPath);
+      
+      if (stats.isDirectory()) {
+        // List directory contents
+        const files = await fs.readdir(fullPath);
+        
+        // Get file details
+        const fileDetails = await Promise.all(
+          files.map(async (file) => {
+            const fileStat = await fs.stat(path.join(fullPath, file));
+            return {
+              name: file,
+              path: path.join(normalizedPath, file),
+              type: fileStat.isDirectory() ? 'directory' : 'file',
+              size: fileStat.size,
+              modified: fileStat.mtime
+            };
+          })
+        );
+        
+        res.json({ files: fileDetails });
+      } else {
+        // Read file content
+        const content = await fs.readFile(fullPath, 'utf8');
+        res.json({ content });
+      }
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // Create directory if it doesn't exist
+        if (normalizedPath === '') {
+          await fs.mkdir(projectDir, { recursive: true });
+          res.json({ files: [] });
+        } else {
+          res.status(404).json({ error: 'File or directory not found' });
+        }
+      } else {
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error('Error getting project files:', error);
+    res.status(500).json({ error: 'Failed to get project files' });
+  }
+});
+
+/**
+ * Create or update a project file
+ * @route POST /api/projects/:id/files
+ */
+router.post('/:id/files', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid || req.user.id;
+    const projectId = req.params.id;
+    const { path: filePath, content, isDirectory = false } = req.body;
+    
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    // Normalize and secure the file path
+    const normalizedPath = path.normalize(filePath).replace(/^(\.\.(\/|\\|$))+/, '');
+    const projectDir = path.join(PROJECTS_DIR, projectId);
+    const fullPath = path.join(projectDir, normalizedPath);
+    
+    // Check if project exists and belongs to user
+    const useSupabase = process.env.USE_SUPABASE === 'true';
+    
+    if (useSupabase) {
+      if (!isSupabaseInitialized()) {
+        return res.status(500).json({ error: "Supabase client not initialized" });
+      }
+      
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .single();
+      
+      if (error) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    } else {
+      // Check if Firebase is initialized
+      const refs = getFirestoreRefs();
+      if (!refs) {
+        return res.status(500).json({ error: "Firebase not initialized" });
+      }
+      
+      const { projectsRef } = refs;
+      const doc = await projectsRef.doc(projectId).get();
+      
+      if (!doc.exists || doc.data().userId !== userId) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    }
+    
+    // Create directory if it doesn't exist
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    
+    if (isDirectory) {
+      // Create directory
+      await fs.mkdir(fullPath, { recursive: true });
+      res.json({ success: true });
+    } else {
+      // Write file content
+      await fs.writeFile(fullPath, content || '');
+      res.json({ success: true });
+    }
+  } catch (error) {
+    console.error('Error creating/updating project file:', error);
+    res.status(500).json({ error: 'Failed to create/update project file' });
+  }
+});
+
+/**
+ * Delete a project file
+ * @route DELETE /api/projects/:id/files
+ */
+router.delete('/:id/files', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid || req.user.id;
+    const projectId = req.params.id;
+    const { path: filePath } = req.body;
+    
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+    
+    // Normalize and secure the file path
+    const normalizedPath = path.normalize(filePath).replace(/^(\.\.(\/|\\|$))+/, '');
+    const projectDir = path.join(PROJECTS_DIR, projectId);
+    const fullPath = path.join(projectDir, normalizedPath);
+    
+    // Check if project exists and belongs to user
+    const useSupabase = process.env.USE_SUPABASE === 'true';
+    
+    if (useSupabase) {
+      if (!isSupabaseInitialized()) {
+        return res.status(500).json({ error: "Supabase client not initialized" });
+      }
+      
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .single();
+      
+      if (error) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    } else {
+      // Check if Firebase is initialized
+      const refs = getFirestoreRefs();
+      if (!refs) {
+        return res.status(500).json({ error: "Firebase not initialized" });
+      }
+      
+      const { projectsRef } = refs;
+      const doc = await projectsRef.doc(projectId).get();
+      
+      if (!doc.exists || doc.data().userId !== userId) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    }
+    
+    // Check if path exists
+    try {
+      const stats = await fs.stat(fullPath);
+      
+      if (stats.isDirectory()) {
+        // Delete directory
+        await fs.rm(fullPath, { recursive: true });
+      } else {
+        // Delete file
+        await fs.unlink(fullPath);
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        res.status(404).json({ error: 'File or directory not found' });
+      } else {
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error('Error deleting project file:', error);
+    res.status(500).json({ error: 'Failed to delete project file' });
   }
 });
 
