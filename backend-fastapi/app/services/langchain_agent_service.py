@@ -3,19 +3,27 @@ LangChain Agent Service - Provides intelligent agents using LangChain
 """
 
 import os
+import logging
 from typing import Dict, List, Any, Optional, Union
-from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain.agents import AgentExecutor, create_openai_functions_agent, create_openai_tools_agent
 from langchain.agents.format_scratchpad import format_to_openai_functions
 from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
+from langchain.tools import BaseTool
+from langchain.chains import LLMChain
+from langchain.chains.router import MultiPromptChain
+from langchain.chains.router.llm_router import LLMRouterChain, RouterOutputParser
+from langchain.chains.router.multi_prompt_prompt import MULTI_PROMPT_ROUTER_TEMPLATE
 
 # Import custom tools
 from .github_service import GitHubService
 from .code_analysis_service import CodeAnalysisService
 from .docker_sandbox_service import DockerSandboxService
+from .memory_service import memory_service
+from .document_index_service import DocumentIndexService
 
 # Import tool wrappers
 from ..tools.github_tools import (

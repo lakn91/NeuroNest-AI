@@ -443,19 +443,106 @@ class CodeAnalysisService:
         
         Args:
             code: Code as string
-            language: Programming language ('python', 'javascript', 'typescript')
+            language: Programming language ('python', 'javascript', 'typescript', etc.)
             
         Returns:
             Dictionary with analysis results
         """
-        if language.lower() == 'python':
-            return self.analyze_python_code(code)
-        elif language.lower() == 'javascript':
-            return self.analyze_javascript_code(code)
-        elif language.lower() == 'typescript':
-            return self.analyze_typescript_code(code)
-        else:
-            raise ValueError(f"Unsupported language: {language}")
+        language = language.lower()
+        
+        # Use LangChain for advanced code analysis
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain.prompts import ChatPromptTemplate
+            
+            # Initialize language model
+            llm = ChatOpenAI(temperature=0)
+            
+            # Create prompt template for code analysis
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are a code analysis expert. Analyze the provided code and provide insights about:
+                1. Code quality
+                2. Potential bugs or issues
+                3. Performance concerns
+                4. Security vulnerabilities
+                5. Best practices that could be applied
+                
+                Format your response as a JSON object with the following structure:
+                {
+                    "quality_score": number between 0-10,
+                    "issues": [
+                        {
+                            "type": "bug|performance|security|style",
+                            "description": "Description of the issue",
+                            "line": line number or null if not applicable,
+                            "severity": "high|medium|low",
+                            "suggestion": "Suggestion to fix the issue"
+                        }
+                    ],
+                    "summary": "Brief summary of the code quality"
+                }
+                """),
+                ("human", f"Language: {language}\n\nCode:\n```{language}\n{code}\n```")
+            ])
+            
+            # Get analysis from LLM
+            response = llm.invoke(prompt)
+            
+            try:
+                # Parse JSON response
+                import json
+                llm_analysis = json.loads(response.content)
+            except json.JSONDecodeError:
+                llm_analysis = {
+                    "error": "Failed to parse LLM response",
+                    "raw_response": response.content
+                }
+            
+            # Combine with traditional analysis
+            if language == 'python':
+                traditional_analysis = self.analyze_python_code(code)
+            elif language == 'javascript':
+                traditional_analysis = self.analyze_javascript_code(code)
+            elif language == 'typescript':
+                traditional_analysis = self.analyze_typescript_code(code)
+            else:
+                # For unsupported languages, use tree-sitter if available
+                try:
+                    # Try to parse with tree-sitter
+                    tree = None
+                    if hasattr(self, f"{language}_parser"):
+                        parser = getattr(self, f"{language}_parser")
+                        tree = parser.parse(bytes(code, 'utf-8'))
+                    
+                    traditional_analysis = {
+                        "issues": [],
+                        "structure": {
+                            "functions": [],
+                            "classes": []
+                        }
+                    }
+                except Exception as e:
+                    traditional_analysis = {
+                        "error": f"Unsupported language for traditional analysis: {language}",
+                        "exception": str(e)
+                    }
+            
+            # Combine results
+            return {
+                "traditional_analysis": traditional_analysis,
+                "llm_analysis": llm_analysis
+            }
+            
+        except ImportError:
+            # Fallback to traditional analysis if LangChain is not available
+            if language == 'python':
+                return self.analyze_python_code(code)
+            elif language == 'javascript':
+                return self.analyze_javascript_code(code)
+            elif language == 'typescript':
+                return self.analyze_typescript_code(code)
+            else:
+                raise ValueError(f"Unsupported language: {language}")
     
     def analyze_file(self, file_path: str) -> Dict[str, Any]:
         """
