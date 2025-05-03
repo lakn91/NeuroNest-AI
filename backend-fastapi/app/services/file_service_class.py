@@ -28,9 +28,22 @@ logger = logging.getLogger(__name__)
 class FileService:
     """Service for handling file operations"""
     
+    def __init__(self, upload_dir=None):
+        """
+        Initialize the file service
+        
+        Args:
+            upload_dir: Directory to store uploaded files
+        """
+        self.upload_dir = upload_dir or settings.UPLOAD_DIR
+        
+        # Create upload directory if it doesn't exist
+        os.makedirs(self.upload_dir, exist_ok=True)
+    
     async def save_upload_file(self, upload_file: UploadFile, user_id: str, destination_dir: Optional[str] = None) -> FileInfo:
         """Save an uploaded file to disk and return file info"""
-        return await save_upload_file(upload_file, user_id, destination_dir)
+        dest_dir = destination_dir or self.upload_dir
+        return await save_upload_file(upload_file, user_id, dest_dir)
     
     async def get_file_info(self, file_id: str) -> Optional[FileInfo]:
         """Get file info from the database or file system"""

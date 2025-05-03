@@ -11,6 +11,7 @@ import logging
 from typing import Dict, List, Any, Optional, Union
 import time
 import shutil
+from app.core.dependencies import get_docker_client
 
 logger = logging.getLogger(__name__)
 
@@ -49,15 +50,16 @@ class MockDockerClient:
 class DockerSandboxService:
     """Service for executing code securely in Docker containers"""
     
-    def __init__(self, base_image: str = "python:3.10-slim"):
+    def __init__(self, base_image: str = "python:3.10-slim", docker_client=None):
         """
         Initialize Docker sandbox service
         
         Args:
             base_image: Base Docker image to use for sandboxes
+            docker_client: Optional Docker client instance
         """
         try:
-            self.client = docker.from_env()
+            self.client = docker_client or get_docker_client() or docker.from_env()
         except Exception as e:
             logger.error(f"Error initializing Docker client: {e}")
             logger.warning("Using mock Docker client")
