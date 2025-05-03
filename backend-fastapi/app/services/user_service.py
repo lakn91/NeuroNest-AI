@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.user import UserCreate, UserResponse, Token
-from app.core.firebase import create_user as firebase_create_user, get_user_by_email, update_user
+from app.core.firebase import create_user as firebase_create_user, get_user_by_email, update_user, get_user_by_uid
+from app.database.sqlite_client import sqlite_client
 
 logger = logging.getLogger(__name__)
 
@@ -17,58 +18,94 @@ async def create_user(user_data: UserCreate) -> UserResponse:
     Create a new user
     """
     try:
-        # Check if Firebase is available
-        if settings.FIREBASE_CREDENTIALS:
-            # Create user in Firebase
-            firebase_user = firebase_create_user(
-                email=user_data.email,
-                password=user_data.password,
-                display_name=user_data.display_name
-            )
+        # Check if user already exists in SQLite
+        users = sqlite_client.query_documents("users", "email", "==", user_data.email)
+        if users and len(users) > 0:
+            raise ValueError("Email already in use")
             
-            # Create user response
-            return UserResponse(
-                uid=firebase_user["uid"],
-                email=firebase_user["email"],
-                display_name=firebase_user.get("displayName"),
-                photo_url=firebase_user.get("photoURL"),
-                provider="firebase",
-                created_at=datetime.utcnow()
-            )
-        else:
-            # Create user locally
-            # Check if user already exists
-            for uid, user in users_db.items():
-                if user["email"] == user_data.email:
-                    raise ValueError("Email already in use")
-            
-            # Generate a unique ID
-            import uuid
-            uid = str(uuid.uuid4())
-            
-            # Hash the password
-            hashed_password = get_password_hash(user_data.password)
-            
-            # Create user
-            users_db[uid] = {
-                "uid": uid,
-                "email": user_data.email,
-                "hashed_password": hashed_password,
-                "display_name": user_data.display_name or user_data.email.split('@')[0],
-                "photo_url": None,
-                "provider": "local",
-                "created_at": datetime.utcnow()
-            }
-            
+        # Check if user already exists in memory
+        for uid, user in users_db.items():
+            if user["email"] == user_data.email:
+                raise ValueError("Email already in use")
+        
+        # Generate a unique ID
+        import uuid
+        uid = str(uuid.uuid4())
+        
+        # Hash the password
+        hashed_password = get_password_hash(user_data.password)
+        
+        # Create user data
+        now = datetime.utcnow()
+        display_name = user_data.display_name or user_data.email.split('@')[0]
+        
+        user_dict = {
+            "id": uid,
+            "email": user_data.email,
+            "hashed_password": hashed_password,
+            "display_name": display_name,
+            "photo_url": None,
+            "provider": "sqlite",
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        # Try to create user in SQLite first
+        doc_id = sqlite_client.add_document("users", user_dict)
+        
+        if doc_id:
             # Create user response
             return UserResponse(
                 uid=uid,
                 email=user_data.email,
-                display_name=users_db[uid]["display_name"],
+                display_name=display_name,
                 photo_url=None,
-                provider="local",
-                created_at=users_db[uid]["created_at"]
+                provider="sqlite",
+                created_at=now
             )
+        
+        # Fall back to Firebase if available
+        if settings.FIREBASE_CREDENTIALS:
+            # Create user in Firebase
+            try:
+                firebase_user = firebase_create_user(
+                    email=user_data.email,
+                    password=user_data.password,
+                    display_name=user_data.display_name
+                )
+                
+                # Create user response
+                return UserResponse(
+                    uid=firebase_user["uid"],
+                    email=firebase_user["email"],
+                    display_name=firebase_user.get("displayName"),
+                    photo_url=firebase_user.get("photoURL"),
+                    provider="firebase",
+                    created_at=now
+                )
+            except Exception as e:
+                logger.error(f"Error creating user in Firebase: {e}")
+        
+        # Fall back to in-memory store
+        users_db[uid] = {
+            "uid": uid,
+            "email": user_data.email,
+            "hashed_password": hashed_password,
+            "display_name": display_name,
+            "photo_url": None,
+            "provider": "local",
+            "created_at": now
+        }
+        
+        # Create user response
+        return UserResponse(
+            uid=uid,
+            email=user_data.email,
+            display_name=display_name,
+            photo_url=None,
+            provider="local",
+            created_at=now
+        )
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise
@@ -78,6 +115,21 @@ async def authenticate_user(email: str, password: str) -> Optional[UserResponse]
     Authenticate a user
     """
     try:
+        # Try to authenticate with SQLite first
+        users = sqlite_client.query_documents("users", "email", "==", email)
+        if users and len(users) > 0:
+            user = users[0]
+            if verify_password(password, user["hashed_password"]):
+                # Create user response
+                return UserResponse(
+                    uid=user["id"],
+                    email=user["email"],
+                    display_name=user.get("display_name"),
+                    photo_url=user.get("photo_url"),
+                    provider="sqlite",
+                    created_at=datetime.fromisoformat(user["created_at"]) if isinstance(user["created_at"], str) else user["created_at"]
+                )
+        
         # Check if Firebase is available
         if settings.FIREBASE_CREDENTIALS:
             # This is a placeholder. In a real implementation, you would use Firebase Admin SDK
@@ -101,23 +153,23 @@ async def authenticate_user(email: str, password: str) -> Optional[UserResponse]
                 )
             except Exception as e:
                 logger.error(f"Error authenticating user with Firebase: {e}")
-                return None
-        else:
-            # Authenticate user locally
-            for uid, user in users_db.items():
-                if user["email"] == email:
-                    if verify_password(password, user["hashed_password"]):
-                        # Create user response
-                        return UserResponse(
-                            uid=uid,
-                            email=user["email"],
-                            display_name=user["display_name"],
-                            photo_url=user["photo_url"],
-                            provider="local",
-                            created_at=user["created_at"]
-                        )
-            
-            return None
+                pass
+        
+        # Fall back to in-memory store
+        for uid, user in users_db.items():
+            if user["email"] == email:
+                if verify_password(password, user["hashed_password"]):
+                    # Create user response
+                    return UserResponse(
+                        uid=uid,
+                        email=user["email"],
+                        display_name=user["display_name"],
+                        photo_url=user["photo_url"],
+                        provider="local",
+                        created_at=user["created_at"]
+                    )
+        
+        return None
     except Exception as e:
         logger.error(f"Error authenticating user: {e}")
         return None
@@ -127,11 +179,22 @@ async def get_user(uid: str) -> Optional[UserResponse]:
     Get a user by ID
     """
     try:
+        # Try to get user from SQLite first
+        user_data = sqlite_client.get_document("users", uid)
+        if user_data:
+            return UserResponse(
+                uid=uid,
+                email=user_data["email"],
+                display_name=user_data.get("display_name"),
+                photo_url=user_data.get("photo_url"),
+                provider="sqlite",
+                created_at=datetime.fromisoformat(user_data["created_at"]) if isinstance(user_data["created_at"], str) else user_data["created_at"]
+            )
+        
         # Check if Firebase is available
         if settings.FIREBASE_CREDENTIALS:
             # Get user from Firebase
             try:
-                from app.core.firebase import get_user_by_uid
                 firebase_user = get_user_by_uid(uid)
                 
                 # Create user response
@@ -145,23 +208,23 @@ async def get_user(uid: str) -> Optional[UserResponse]:
                 )
             except Exception as e:
                 logger.error(f"Error getting user from Firebase: {e}")
-                return None
-        else:
-            # Get user locally
-            if uid in users_db:
-                user = users_db[uid]
-                
-                # Create user response
-                return UserResponse(
-                    uid=uid,
-                    email=user["email"],
-                    display_name=user["display_name"],
-                    photo_url=user["photo_url"],
-                    provider="local",
-                    created_at=user["created_at"]
-                )
+                pass
+        
+        # Fall back to in-memory store
+        if uid in users_db:
+            user = users_db[uid]
             
-            return None
+            # Create user response
+            return UserResponse(
+                uid=uid,
+                email=user["email"],
+                display_name=user["display_name"],
+                photo_url=user["photo_url"],
+                provider="local",
+                created_at=user["created_at"]
+            )
+        
+        return None
     except Exception as e:
         logger.error(f"Error getting user: {e}")
         return None
