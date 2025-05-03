@@ -251,6 +251,15 @@ export class PluginManager {
   }
   
   /**
+   * Get the default plugin (first plugin or null if none exists)
+   * @returns The default plugin or null
+   */
+  getDefaultPlugin(): Plugin | null {
+    const plugins = this.getAllPlugins();
+    return plugins.length > 0 ? plugins[0] : null;
+  }
+  
+  /**
    * Alias for getAllPlugins for compatibility
    * @returns Array of all plugins
    */

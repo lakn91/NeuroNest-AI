@@ -62,6 +62,27 @@ export class MemoryRegistry {
   }
   
   /**
+   * Get the default memory (first memory or create a buffer memory if none exists)
+   * @returns The default memory
+   */
+  getDefaultMemory(): Memory {
+    const memories = this.getAllMemories();
+    if (memories.length > 0) {
+      return memories[0];
+    }
+    
+    // If no memories exist, create a default buffer memory
+    const bufferFactory = this.memoryTypes.get('buffer');
+    if (bufferFactory) {
+      const memory = bufferFactory({ name: 'default-buffer' });
+      this.registerMemory(memory);
+      return memory;
+    }
+    
+    throw new Error('No memories available and buffer memory type not registered');
+  }
+  
+  /**
    * Get the names of all memory instances
    * @returns Array of memory names
    */
