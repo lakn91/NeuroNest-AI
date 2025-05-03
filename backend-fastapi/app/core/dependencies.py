@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from typing import Optional, Dict, Any
 import logging
+import docker
 from app.core.config import settings
 from app.core.security import verify_token
 from app.core.firebase import verify_firebase_token
@@ -108,3 +109,43 @@ async def get_api_key(
         pass
     
     return api_keys
+
+def get_docker_client():
+    """
+    Get a Docker client instance
+    
+    Returns:
+        Docker client or None if Docker is not available
+    """
+    try:
+        client = docker.from_env()
+        # Test connection
+        client.ping()
+        return client
+    except Exception as e:
+        logger.warning(f"Docker not available: {e}")
+        return None
+
+def get_docker_sandbox_service():
+    """
+    Get a DockerSandboxService instance
+    
+    Returns:
+        DockerSandboxService instance
+    """
+    from app.services.docker_sandbox_service import DockerSandboxService
+    docker_client = get_docker_client()
+    return DockerSandboxService(docker_client=docker_client)
+
+def get_file_service(upload_dir=None):
+    """
+    Get a FileService instance
+    
+    Args:
+        upload_dir: Optional custom upload directory
+        
+    Returns:
+        FileService instance
+    """
+    from app.services.file_service_class import FileService
+    return FileService(upload_dir=upload_dir)

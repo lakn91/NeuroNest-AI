@@ -3,7 +3,8 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 import logging
 from app.services.runtime_service import RuntimeService
-from app.api.deps import get_runtime_service, get_current_user
+from app.core.dependencies import get_current_user
+from app.api.deps import get_runtime_service
 from app.models.execution import RuntimeEnvironment, RuntimeStatus, RuntimeLog
 
 router = APIRouter()
@@ -21,12 +22,15 @@ class RuntimeCommandRequest(BaseModel):
     command: str
 
 @router.post("/create", response_model=RuntimeEnvironment)
-async def create_runtime(request: RuntimeRequest, background_tasks: BackgroundTasks):
+async def create_runtime(
+    request: RuntimeRequest, 
+    background_tasks: BackgroundTasks,
+    runtime_service: RuntimeService = Depends(get_runtime_service)
+):
     """
     Create a new runtime environment for a project
     """
     try:
-        runtime_service = RuntimeService()
         runtime = await runtime_service.create_runtime(
             project_id=request.project_id,
             language=request.language,
@@ -47,12 +51,14 @@ async def create_runtime(request: RuntimeRequest, background_tasks: BackgroundTa
         raise HTTPException(status_code=500, detail=f"Failed to create runtime: {str(e)}")
 
 @router.get("/status/{runtime_id}", response_model=RuntimeStatus)
-async def get_runtime_status(runtime_id: str):
+async def get_runtime_status(
+    runtime_id: str,
+    runtime_service: RuntimeService = Depends(get_runtime_service)
+):
     """
     Get the status of a runtime environment
     """
     try:
-        runtime_service = RuntimeService()
         status = await runtime_service.get_runtime_status(runtime_id)
         return status
     except Exception as e:
@@ -60,12 +66,14 @@ async def get_runtime_status(runtime_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to get runtime status: {str(e)}")
 
 @router.post("/execute", response_model=Dict[str, Any])
-async def execute_command(request: RuntimeCommandRequest):
+async def execute_command(
+    request: RuntimeCommandRequest,
+    runtime_service: RuntimeService = Depends(get_runtime_service)
+):
     """
     Execute a command in a runtime environment
     """
     try:
-        runtime_service = RuntimeService()
         result = await runtime_service.execute_command(
             runtime_id=request.runtime_id,
             command=request.command
@@ -79,13 +87,13 @@ async def execute_command(request: RuntimeCommandRequest):
 async def get_runtime_logs(
     runtime_id: str, 
     limit: int = Query(100, description="Maximum number of log entries to return"),
-    offset: int = Query(0, description="Offset for pagination")
+    offset: int = Query(0, description="Offset for pagination"),
+    runtime_service: RuntimeService = Depends(get_runtime_service)
 ):
     """
     Get logs from a runtime environment
     """
     try:
-        runtime_service = RuntimeService()
         logs = await runtime_service.get_runtime_logs(
             runtime_id=runtime_id,
             limit=limit,
@@ -97,12 +105,14 @@ async def get_runtime_logs(
         raise HTTPException(status_code=500, detail=f"Failed to get runtime logs: {str(e)}")
 
 @router.post("/stop/{runtime_id}")
-async def stop_runtime(runtime_id: str):
+async def stop_runtime(
+    runtime_id: str,
+    runtime_service: RuntimeService = Depends(get_runtime_service)
+):
     """
     Stop a runtime environment
     """
     try:
-        runtime_service = RuntimeService()
         await runtime_service.stop_runtime(runtime_id)
         return {"status": "stopped", "runtime_id": runtime_id}
     except Exception as e:
@@ -110,12 +120,15 @@ async def stop_runtime(runtime_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to stop runtime: {str(e)}")
 
 @router.post("/restart/{runtime_id}", response_model=RuntimeStatus)
-async def restart_runtime(runtime_id: str, background_tasks: BackgroundTasks):
+async def restart_runtime(
+    runtime_id: str, 
+    background_tasks: BackgroundTasks,
+    runtime_service: RuntimeService = Depends(get_runtime_service)
+):
     """
     Restart a runtime environment
     """
     try:
-        runtime_service = RuntimeService()
         await runtime_service.stop_runtime(runtime_id)
         
         # Start the runtime in the background
@@ -130,12 +143,14 @@ async def restart_runtime(runtime_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=f"Failed to restart runtime: {str(e)}")
 
 @router.get("/list", response_model=List[RuntimeEnvironment])
-async def list_runtimes(project_id: Optional[str] = None):
+async def list_runtimes(
+    project_id: Optional[str] = None,
+    runtime_service: RuntimeService = Depends(get_runtime_service)
+):
     """
     List all runtime environments, optionally filtered by project_id
     """
     try:
-        runtime_service = RuntimeService()
         runtimes = await runtime_service.list_runtimes(project_id)
         return runtimes
     except Exception as e:
@@ -143,12 +158,14 @@ async def list_runtimes(project_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=f"Failed to list runtimes: {str(e)}")
 
 @router.delete("/{runtime_id}")
-async def delete_runtime(runtime_id: str):
+async def delete_runtime(
+    runtime_id: str,
+    runtime_service: RuntimeService = Depends(get_runtime_service)
+):
     """
     Delete a runtime environment
     """
     try:
-        runtime_service = RuntimeService()
         await runtime_service.delete_runtime(runtime_id)
         return {"status": "deleted", "runtime_id": runtime_id}
     except Exception as e:
