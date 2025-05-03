@@ -37,8 +37,8 @@ NeuroNest AI is a powerful, modular AI agent system designed to provide advanced
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/neuronest-ai.git
-cd neuronest-ai
+git clone https://github.com/kouhhi/NeuroNest-AI.git
+cd NeuroNest-AI
 
 # Install dependencies
 npm install
