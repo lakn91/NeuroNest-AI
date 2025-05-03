@@ -10,7 +10,7 @@ from fastapi import UploadFile
 import PyPDF2
 from PIL import Image
 import io
-from app.core.config import settings
+from app.config import settings
 from app.models.file import FileInfo, FileAnalysisResult
 
 logger = logging.getLogger(__name__)

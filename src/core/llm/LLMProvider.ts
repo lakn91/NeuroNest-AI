@@ -29,6 +29,13 @@ export interface LLMProvider {
    * @returns The generated embeddings
    */
   generateEmbeddings(text: string): Promise<number[]>;
+  
+  /**
+   * Generate text from the LLM (alias for generateCompletion)
+   * @param options Options for text generation
+   * @returns The generated text response
+   */
+  generateText(options: { prompt: string; maxTokens?: number; temperature?: number }): Promise<{ text: string }>;
 }
 
 /**
@@ -129,4 +136,13 @@ export abstract class BaseLLMProvider implements LLMProvider {
   abstract generateCompletion(prompt: string, options?: CompletionOptions): Promise<string>;
   abstract generateChatCompletion(messages: ChatMessage[], options?: CompletionOptions): Promise<ChatMessage>;
   abstract generateEmbeddings(text: string): Promise<number[]>;
+  
+  // Default implementation of generateText that uses generateCompletion
+  async generateText(options: { prompt: string; maxTokens?: number; temperature?: number }): Promise<{ text: string }> {
+    const text = await this.generateCompletion(options.prompt, {
+      maxTokens: options.maxTokens,
+      temperature: options.temperature
+    });
+    return { text };
+  }
 }

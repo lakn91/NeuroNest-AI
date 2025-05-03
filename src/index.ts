@@ -55,7 +55,8 @@ async function initialize() {
     // This will be implemented in a separate file
     
   } catch (error) {
-    logger.error(`Failed to initialize NeuroNest AI: ${error.message}`, 'main', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to initialize NeuroNest AI: ${errorMessage}`, 'main', error);
     process.exit(1);
   }
 }

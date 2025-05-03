@@ -16,6 +16,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@huggingface/inference": "^3.11.0",
+    "@langchain/community": "^0.3.42",
+    "@langchain/core": "^0.3.51",
     "@langchain/google-genai": "^0.1.10",
     "@langchain/openai": "^0.5.7",
     "@supabase/supabase-js": "^2.39.7",

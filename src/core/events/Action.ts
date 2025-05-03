@@ -19,6 +19,17 @@ export interface Action extends BaseEvent {
    * The agent that created this action
    */
   agentId: string;
+  
+  /**
+   * Type of the action
+   */
+  type: string;
+  
+  /**
+   * Execute the action
+   * @returns Result of the action execution
+   */
+  execute(): Promise<any>;
 }
 
 /**
@@ -28,6 +39,7 @@ export abstract class BaseAction extends BaseEvent implements Action {
   name: string;
   parameters: Record<string, any>;
   agentId: string;
+  type: string;
   
   constructor(
     name: string,
@@ -40,7 +52,10 @@ export abstract class BaseAction extends BaseEvent implements Action {
     this.name = name;
     this.parameters = parameters;
     this.agentId = agentId;
+    this.type = `action.${name}`;
   }
+  
+  abstract execute(): Promise<any>;
 }
 
 /**
@@ -52,6 +67,10 @@ export class MessageAction extends BaseAction {
   constructor(content: string, agentId: string, metadata?: Record<string, any>) {
     super('message', { content }, agentId, EventSource.AGENT, metadata);
     this.content = content;
+  }
+  
+  async execute(): Promise<string> {
+    return this.content;
   }
 }
 
@@ -67,6 +86,10 @@ export class SystemMessageAction extends BaseAction {
     this.content = content;
     this.tools = tools;
   }
+  
+  async execute(): Promise<string> {
+    return this.content;
+  }
 }
 
 /**
@@ -81,6 +104,11 @@ export class CodeExecutionAction extends BaseAction {
     this.code = code;
     this.language = language;
   }
+  
+  async execute(): Promise<string> {
+    // This would be implemented with actual code execution logic
+    return `Executed ${this.language} code: ${this.code.substring(0, 50)}...`;
+  }
 }
 
 /**
@@ -92,6 +120,11 @@ export class ShellCommandAction extends BaseAction {
   constructor(command: string, agentId: string, metadata?: Record<string, any>) {
     super('shell_command', { command }, agentId, EventSource.AGENT, metadata);
     this.command = command;
+  }
+  
+  async execute(): Promise<string> {
+    // This would be implemented with actual shell command execution logic
+    return `Executed shell command: ${this.command}`;
   }
 }
 
@@ -115,6 +148,22 @@ export class FileOperationAction extends BaseAction {
     this.path = path;
     this.content = content;
   }
+  
+  async execute(): Promise<string> {
+    // This would be implemented with actual file operation logic
+    switch (this.operation) {
+      case 'read':
+        return `Read file: ${this.path}`;
+      case 'write':
+        return `Wrote to file: ${this.path}`;
+      case 'delete':
+        return `Deleted file: ${this.path}`;
+      case 'list':
+        return `Listed files in: ${this.path}`;
+      default:
+        return `Unknown file operation: ${this.operation}`;
+    }
+  }
 }
 
 /**
@@ -126,6 +175,11 @@ export class WebSearchAction extends BaseAction {
   constructor(query: string, agentId: string, metadata?: Record<string, any>) {
     super('web_search', { query }, agentId, EventSource.AGENT, metadata);
     this.query = query;
+  }
+  
+  async execute(): Promise<string> {
+    // This would be implemented with actual web search logic
+    return `Searched for: ${this.query}`;
   }
 }
 
@@ -140,5 +194,9 @@ export class TaskCompletionAction extends BaseAction {
     super('task_completion', { success, message }, agentId, EventSource.AGENT, metadata);
     this.success = success;
     this.message = message;
+  }
+  
+  async execute(): Promise<string> {
+    return this.message;
   }
 }

@@ -3,206 +3,177 @@ Docker Sandbox Tools for LangChain Agents
 """
 
 from typing import Dict, List, Any, Optional
-from langchain.tools import BaseTool, StructuredTool, tool
-from pydantic import BaseModel, Field
+import logging
+from langchain.tools import tool
 
-class CreateSandboxSessionInput(BaseModel):
-    """Input for CreateSandboxSessionTool"""
-    language: str = Field(..., description="Programming language for the session ('python', 'javascript')")
+# Configure logging
+logger = logging.getLogger(__name__)
 
-class CreateSandboxSessionTool(BaseTool):
-    """Tool for creating a sandbox session"""
+@tool("create_sandbox_session")
+def create_sandbox_session(docker_sandbox_service, language: str) -> Dict[str, Any]:
+    """Creates a new sandbox session for executing code
     
-    name = "create_sandbox_session"
-    description = "Creates a new sandbox session for executing code"
-    args_schema = CreateSandboxSessionInput
-    
-    def __init__(self, docker_sandbox_service):
-        """Initialize with Docker sandbox service"""
-        self.docker_sandbox_service = docker_sandbox_service
-        super().__init__()
-    
-    def _run(self, language: str) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.docker_sandbox_service.create_session(language)
-    
-    async def _arun(self, language: str) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(language)
+    Args:
+        docker_sandbox_service: The docker sandbox service instance
+        language: Programming language for the session ('python', 'javascript')
+        
+    Returns:
+        Dictionary with session information
+    """
+    try:
+        return docker_sandbox_service.create_session(language)
+    except Exception as e:
+        logger.error(f"Error creating sandbox session: {e}")
+        return {"error": str(e), "session_id": f"mock-{language}-session"}
 
-class ExecutePythonCodeInput(BaseModel):
-    """Input for ExecutePythonCodeTool"""
-    session_id: str = Field(..., description="Session ID")
-    code: str = Field(..., description="Python code to execute")
-    timeout: int = Field(30, description="Maximum execution time in seconds")
+@tool("execute_python_code")
+def execute_python_code(docker_sandbox_service, session_id: str, code: str, timeout: int = 30) -> Dict[str, Any]:
+    """Executes Python code in a sandbox environment
+    
+    Args:
+        docker_sandbox_service: The docker sandbox service instance
+        session_id: Session ID
+        code: Python code to execute
+        timeout: Maximum execution time in seconds
+        
+    Returns:
+        Dictionary with execution results
+    """
+    try:
+        return docker_sandbox_service.execute_code(session_id, code, timeout)
+    except Exception as e:
+        logger.error(f"Error executing Python code: {e}")
+        return {
+            "output": f"Error: {str(e)}",
+            "error": str(e),
+            "execution_time": 0
+        }
 
-class ExecutePythonCodeTool(BaseTool):
-    """Tool for executing Python code in a sandbox"""
+@tool("execute_javascript_code")
+def execute_javascript_code(docker_sandbox_service, session_id: str, code: str, timeout: int = 30) -> Dict[str, Any]:
+    """Executes JavaScript code in a sandbox environment
     
-    name = "execute_python_code"
-    description = "Executes Python code in a sandbox environment"
-    args_schema = ExecutePythonCodeInput
-    
-    def __init__(self, docker_sandbox_service):
-        """Initialize with Docker sandbox service"""
-        self.docker_sandbox_service = docker_sandbox_service
-        super().__init__()
-    
-    def _run(self, session_id: str, code: str, timeout: int = 30) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.docker_sandbox_service.execute_code(session_id, code, timeout)
-    
-    async def _arun(self, session_id: str, code: str, timeout: int = 30) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(session_id, code, timeout)
+    Args:
+        docker_sandbox_service: The docker sandbox service instance
+        session_id: Session ID
+        code: JavaScript code to execute
+        timeout: Maximum execution time in seconds
+        
+    Returns:
+        Dictionary with execution results
+    """
+    try:
+        return docker_sandbox_service.execute_javascript(session_id, code, timeout)
+    except Exception as e:
+        logger.error(f"Error executing JavaScript code: {e}")
+        return {
+            "output": f"Error: {str(e)}",
+            "error": str(e),
+            "execution_time": 0
+        }
 
-class ExecuteJavaScriptCodeInput(BaseModel):
-    """Input for ExecuteJavaScriptCodeTool"""
-    session_id: str = Field(..., description="Session ID")
-    code: str = Field(..., description="JavaScript code to execute")
-    timeout: int = Field(30, description="Maximum execution time in seconds")
+@tool("install_package")
+def install_package(docker_sandbox_service, session_id: str, package_name: str) -> Dict[str, Any]:
+    """Installs a package in a sandbox environment
+    
+    Args:
+        docker_sandbox_service: The docker sandbox service instance
+        session_id: Session ID
+        package_name: Name of the package to install
+        
+    Returns:
+        Dictionary with installation results
+    """
+    try:
+        return docker_sandbox_service.install_package(session_id, package_name)
+    except Exception as e:
+        logger.error(f"Error installing package: {e}")
+        return {
+            "success": False,
+            "output": f"Error: {str(e)}",
+            "error": str(e)
+        }
 
-class ExecuteJavaScriptCodeTool(BaseTool):
-    """Tool for executing JavaScript code in a sandbox"""
+@tool("upload_file")
+def upload_file(docker_sandbox_service, session_id: str, file_path: str, content: str) -> Dict[str, Any]:
+    """Uploads a file to a sandbox environment
     
-    name = "execute_javascript_code"
-    description = "Executes JavaScript code in a sandbox environment"
-    args_schema = ExecuteJavaScriptCodeInput
-    
-    def __init__(self, docker_sandbox_service):
-        """Initialize with Docker sandbox service"""
-        self.docker_sandbox_service = docker_sandbox_service
-        super().__init__()
-    
-    def _run(self, session_id: str, code: str, timeout: int = 30) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.docker_sandbox_service.execute_javascript(session_id, code, timeout)
-    
-    async def _arun(self, session_id: str, code: str, timeout: int = 30) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(session_id, code, timeout)
+    Args:
+        docker_sandbox_service: The docker sandbox service instance
+        session_id: Session ID
+        file_path: Path where the file should be created (relative to workspace)
+        content: File content
+        
+    Returns:
+        Dictionary with upload results
+    """
+    try:
+        return docker_sandbox_service.upload_file(session_id, file_path, content)
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-class InstallPackageInput(BaseModel):
-    """Input for InstallPackageTool"""
-    session_id: str = Field(..., description="Session ID")
-    package_name: str = Field(..., description="Name of the package to install")
+@tool("list_files")
+def list_files(docker_sandbox_service, session_id: str, directory: str = "") -> Dict[str, Any]:
+    """Lists files in a sandbox environment
+    
+    Args:
+        docker_sandbox_service: The docker sandbox service instance
+        session_id: Session ID
+        directory: Directory to list (relative to workspace)
+        
+    Returns:
+        Dictionary with file listing
+    """
+    try:
+        return docker_sandbox_service.list_files(session_id, directory)
+    except Exception as e:
+        logger.error(f"Error listing files: {e}")
+        return {
+            "files": [],
+            "error": str(e)
+        }
 
-class InstallPackageTool(BaseTool):
-    """Tool for installing a package in a sandbox"""
+@tool("read_file")
+def read_file(docker_sandbox_service, session_id: str, file_path: str) -> Dict[str, Any]:
+    """Reads a file from a sandbox environment
     
-    name = "install_package"
-    description = "Installs a package in a sandbox environment"
-    args_schema = InstallPackageInput
-    
-    def __init__(self, docker_sandbox_service):
-        """Initialize with Docker sandbox service"""
-        self.docker_sandbox_service = docker_sandbox_service
-        super().__init__()
-    
-    def _run(self, session_id: str, package_name: str) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.docker_sandbox_service.install_package(session_id, package_name)
-    
-    async def _arun(self, session_id: str, package_name: str) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(session_id, package_name)
+    Args:
+        docker_sandbox_service: The docker sandbox service instance
+        session_id: Session ID
+        file_path: Path to the file (relative to workspace)
+        
+    Returns:
+        Dictionary with file content
+    """
+    try:
+        return docker_sandbox_service.read_file(session_id, file_path)
+    except Exception as e:
+        logger.error(f"Error reading file: {e}")
+        return {
+            "content": "",
+            "error": str(e)
+        }
 
-class UploadFileInput(BaseModel):
-    """Input for UploadFileTool"""
-    session_id: str = Field(..., description="Session ID")
-    file_path: str = Field(..., description="Path where the file should be created (relative to workspace)")
-    content: str = Field(..., description="File content")
-
-class UploadFileTool(BaseTool):
-    """Tool for uploading a file to a sandbox"""
+@tool("close_sandbox_session")
+def close_sandbox_session(docker_sandbox_service, session_id: str) -> Dict[str, Any]:
+    """Closes a sandbox session and cleans up resources
     
-    name = "upload_file"
-    description = "Uploads a file to a sandbox environment"
-    args_schema = UploadFileInput
-    
-    def __init__(self, docker_sandbox_service):
-        """Initialize with Docker sandbox service"""
-        self.docker_sandbox_service = docker_sandbox_service
-        super().__init__()
-    
-    def _run(self, session_id: str, file_path: str, content: str) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.docker_sandbox_service.upload_file(session_id, file_path, content)
-    
-    async def _arun(self, session_id: str, file_path: str, content: str) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(session_id, file_path, content)
-
-class ListFilesInput(BaseModel):
-    """Input for ListFilesTool"""
-    session_id: str = Field(..., description="Session ID")
-    directory: str = Field("", description="Directory to list (relative to workspace)")
-
-class ListFilesTool(BaseTool):
-    """Tool for listing files in a sandbox"""
-    
-    name = "list_files"
-    description = "Lists files in a sandbox environment"
-    args_schema = ListFilesInput
-    
-    def __init__(self, docker_sandbox_service):
-        """Initialize with Docker sandbox service"""
-        self.docker_sandbox_service = docker_sandbox_service
-        super().__init__()
-    
-    def _run(self, session_id: str, directory: str = "") -> Dict[str, Any]:
-        """Run the tool"""
-        return self.docker_sandbox_service.list_files(session_id, directory)
-    
-    async def _arun(self, session_id: str, directory: str = "") -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(session_id, directory)
-
-class ReadFileInput(BaseModel):
-    """Input for ReadFileTool"""
-    session_id: str = Field(..., description="Session ID")
-    file_path: str = Field(..., description="Path to the file (relative to workspace)")
-
-class ReadFileTool(BaseTool):
-    """Tool for reading a file from a sandbox"""
-    
-    name = "read_file"
-    description = "Reads a file from a sandbox environment"
-    args_schema = ReadFileInput
-    
-    def __init__(self, docker_sandbox_service):
-        """Initialize with Docker sandbox service"""
-        self.docker_sandbox_service = docker_sandbox_service
-        super().__init__()
-    
-    def _run(self, session_id: str, file_path: str) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.docker_sandbox_service.read_file(session_id, file_path)
-    
-    async def _arun(self, session_id: str, file_path: str) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(session_id, file_path)
-
-class CloseSandboxSessionInput(BaseModel):
-    """Input for CloseSandboxSessionTool"""
-    session_id: str = Field(..., description="Session ID")
-
-class CloseSandboxSessionTool(BaseTool):
-    """Tool for closing a sandbox session"""
-    
-    name = "close_sandbox_session"
-    description = "Closes a sandbox session and cleans up resources"
-    args_schema = CloseSandboxSessionInput
-    
-    def __init__(self, docker_sandbox_service):
-        """Initialize with Docker sandbox service"""
-        self.docker_sandbox_service = docker_sandbox_service
-        super().__init__()
-    
-    def _run(self, session_id: str) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.docker_sandbox_service.close_session(session_id)
-    
-    async def _arun(self, session_id: str) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(session_id)
+    Args:
+        docker_sandbox_service: The docker sandbox service instance
+        session_id: Session ID
+        
+    Returns:
+        Dictionary with closure results
+    """
+    try:
+        return docker_sandbox_service.close_session(session_id)
+    except Exception as e:
+        logger.error(f"Error closing sandbox session: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }

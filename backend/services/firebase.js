@@ -185,8 +185,12 @@ if (process.env.USE_SUPABASE !== 'true' && admin.apps.length === 0) {
       // If we're in development mode, use mock Firebase
       if (process.env.NODE_ENV === 'development' || process.env.MOCK_FIREBASE === 'true') {
         console.log('Using mock Firebase implementation for development');
-        // Replace the admin object with our mock implementation
-        Object.assign(admin, createMockFirebase());
+        // Create a mock implementation
+        const mockFirebase = createMockFirebase();
+        
+        // Use the mock implementation for specific functions
+        // instead of trying to replace the entire admin object
+        global.mockFirebase = mockFirebase;
         firebaseInitialized = true;
       } else {
         throw initError;
@@ -199,8 +203,12 @@ if (process.env.USE_SUPABASE !== 'true' && admin.apps.length === 0) {
     // If we're in development mode, use mock Firebase
     if (process.env.NODE_ENV === 'development' || process.env.MOCK_FIREBASE === 'true') {
       console.log('Using mock Firebase implementation for development');
-      // Replace the admin object with our mock implementation
-      Object.assign(admin, createMockFirebase());
+      // Create a mock implementation
+      const mockFirebase = createMockFirebase();
+      
+      // Use the mock implementation for specific functions
+      // instead of trying to replace the entire admin object
+      global.mockFirebase = mockFirebase;
       firebaseInitialized = true;
     }
   }

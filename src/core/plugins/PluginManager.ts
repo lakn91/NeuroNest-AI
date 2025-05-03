@@ -76,6 +76,30 @@ export class PluginManager {
   }
   
   /**
+   * Load all plugins from a specified directory
+   * @param directory The directory to load plugins from
+   */
+  async loadPluginsFromDirectory(directory: string): Promise<void> {
+    if (!fs.existsSync(directory)) {
+      throw new Error(`Plugin directory ${directory} does not exist`);
+    }
+    
+    // Get all plugin directories
+    const pluginDirs = fs.readdirSync(directory, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => path.join(directory, dirent.name));
+    
+    // Load each plugin
+    for (const pluginDir of pluginDirs) {
+      try {
+        await this.loadPlugin(pluginDir);
+      } catch (error) {
+        console.error(`Error loading plugin from ${pluginDir}:`, error);
+      }
+    }
+  }
+  
+  /**
    * Load a plugin from a directory
    * @param pluginDir The directory containing the plugin
    */
@@ -224,6 +248,32 @@ export class PluginManager {
    */
   getAllPlugins(): Plugin[] {
     return Array.from(this.plugins.values());
+  }
+  
+  /**
+   * Alias for getAllPlugins for compatibility
+   * @returns Array of all plugins
+   */
+  getPlugins(): Plugin[] {
+    return this.getAllPlugins();
+  }
+  
+  /**
+   * Unload all plugins
+   */
+  async unloadAllPlugins(): Promise<void> {
+    const pluginIds = Array.from(this.plugins.keys());
+    for (const pluginId of pluginIds) {
+      try {
+        // Deactivate the plugin first
+        await this.deactivatePlugin(pluginId);
+        
+        // Then remove it from the registry
+        this.plugins.delete(pluginId);
+      } catch (error) {
+        console.error(`Error unloading plugin ${pluginId}:`, error);
+      }
+    }
   }
   
   /**

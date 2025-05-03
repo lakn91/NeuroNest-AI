@@ -96,7 +96,8 @@ async def get_api_key(
         api_keys["openai"] = settings.OPENAI_API_KEY
     
     # Override with user-provided API key if available
-    if x_api_key and x_api_provider := Header(None):
+    x_api_provider = Header(None)
+    if x_api_key and x_api_provider:
         api_keys[x_api_provider.lower()] = x_api_key
     
     # If user is authenticated, check for user-specific API keys

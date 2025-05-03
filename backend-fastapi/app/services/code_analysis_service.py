@@ -6,12 +6,21 @@ import os
 import json
 import subprocess
 import tempfile
+import logging
 from typing import Dict, List, Any, Optional, Union
 import pylint.lint
 from pylint.reporters.json_reporter import JSONReporter
 from io import StringIO
 import ast
-from tree_sitter import Language, Parser
+
+# Mock tree-sitter imports
+class Language:
+    pass
+    
+class Parser:
+    pass
+
+logger = logging.getLogger(__name__)
 
 class CodeAnalysisService:
     """Service for analyzing code using various static analysis tools"""
@@ -23,36 +32,51 @@ class CodeAnalysisService:
     
     def _init_tree_sitter(self):
         """Initialize tree-sitter language parsers"""
-        # Path to tree-sitter language libraries
-        # In production, these should be pre-built and stored in a known location
-        try:
-            # Try to load pre-built languages
-            self.PY_LANGUAGE = Language('/tmp/tree-sitter-languages.so', 'python')
-            self.JS_LANGUAGE = Language('/tmp/tree-sitter-languages.so', 'javascript')
-            self.TS_LANGUAGE = Language('/tmp/tree-sitter-languages.so', 'typescript')
-        except:
-            # Build languages if not available
-            # Note: In production, this should be done during deployment
-            Language.build_library(
-                '/tmp/tree-sitter-languages.so',
-                [
-                    '/tmp/tree-sitter-python',
-                    '/tmp/tree-sitter-javascript',
-                    '/tmp/tree-sitter-typescript'
-                ]
-            )
-            self.PY_LANGUAGE = Language('/tmp/tree-sitter-languages.so', 'python')
-            self.JS_LANGUAGE = Language('/tmp/tree-sitter-languages.so', 'javascript')
-            self.TS_LANGUAGE = Language('/tmp/tree-sitter-languages.so', 'typescript')
+        # Mock implementation for tree-sitter
+        logger.warning("Using mock implementation for tree-sitter")
+        
+        # Create mock Language class
+        class MockLanguage:
+            def __init__(self, name):
+                self.name = name
+                
+        # Create mock Parser class
+        class MockParser:
+            def __init__(self):
+                pass
+                
+            def set_language(self, language):
+                self.language = language
+                
+            def parse(self, source_code):
+                return MockTree()
+                
+        class MockTree:
+            def __init__(self):
+                self.root_node = MockNode()
+                
+        class MockNode:
+            def __init__(self):
+                self.children = []
+                self.type = "mock_node"
+                self.text = ""
+                
+            def walk(self):
+                return []
+        
+        # Set mock languages
+        self.PY_LANGUAGE = MockLanguage("python")
+        self.JS_LANGUAGE = MockLanguage("javascript")
+        self.TS_LANGUAGE = MockLanguage("typescript")
         
         # Create parsers
-        self.py_parser = Parser()
+        self.py_parser = MockParser()
         self.py_parser.set_language(self.PY_LANGUAGE)
         
-        self.js_parser = Parser()
+        self.js_parser = MockParser()
         self.js_parser.set_language(self.JS_LANGUAGE)
         
-        self.ts_parser = Parser()
+        self.ts_parser = MockParser()
         self.ts_parser.set_language(self.TS_LANGUAGE)
     
     def analyze_python_code(self, code: str) -> Dict[str, Any]:

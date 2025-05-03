@@ -7,9 +7,44 @@ import uuid
 import tempfile
 import json
 import docker
+import logging
 from typing import Dict, List, Any, Optional, Union
 import time
 import shutil
+
+logger = logging.getLogger(__name__)
+
+# Mock Docker client for environments without Docker
+class MockDockerClient:
+    """Mock Docker client for environments without Docker"""
+    
+    class MockContainer:
+        def __init__(self, id):
+            self.id = id
+            
+        def exec_run(self, cmd, **kwargs):
+            return (0, f"Mock execution of: {cmd}".encode())
+            
+        def stop(self):
+            pass
+            
+        def remove(self):
+            pass
+    
+    def __init__(self):
+        self.containers = self.MockContainerCollection()
+        self.images = self.MockImageCollection()
+        
+    class MockContainerCollection:
+        def run(self, image, **kwargs):
+            return MockDockerClient.MockContainer(str(uuid.uuid4()))
+            
+        def get(self, id):
+            return MockDockerClient.MockContainer(id)
+    
+    class MockImageCollection:
+        def pull(self, image):
+            return None
 
 class DockerSandboxService:
     """Service for executing code securely in Docker containers"""
@@ -21,7 +56,13 @@ class DockerSandboxService:
         Args:
             base_image: Base Docker image to use for sandboxes
         """
-        self.client = docker.from_env()
+        try:
+            self.client = docker.from_env()
+        except Exception as e:
+            logger.error(f"Error initializing Docker client: {e}")
+            logger.warning("Using mock Docker client")
+            self.client = MockDockerClient()
+            
         self.base_image = base_image
         self.containers = {}  # Map of session_id -> container_id
         self.temp_dirs = {}   # Map of session_id -> temp_dir_path

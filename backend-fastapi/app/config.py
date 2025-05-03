@@ -3,7 +3,7 @@ Application Configuration
 """
 
 import os
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -48,9 +48,11 @@ class Settings(BaseSettings):
     # Debug mode
     debug: bool = os.environ.get("DEBUG", "false").lower() == "true"
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"
+    }
 
 
 # Create settings instance

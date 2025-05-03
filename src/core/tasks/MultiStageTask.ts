@@ -1,5 +1,6 @@
 import { BaseTask, Task, TaskConfig, TaskStatus } from './Task';
 import { Agent } from '../agents/Agent';
+import { DefaultEventStream } from '../events/EventStream';
 
 /**
  * Stage in a multi-stage task
@@ -49,6 +50,11 @@ export class MultiStageTask extends BaseTask {
   constructor(config: MultiStageTaskConfig) {
     super(config);
     this.stages = config.stages;
+    
+    // Initialize event stream if not provided in config
+    if (!this.eventStream) {
+      this.eventStream = new DefaultEventStream();
+    }
   }
   
   /**
@@ -84,11 +90,31 @@ export class MultiStageTask extends BaseTask {
         stageResults: this.stageResults
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.result = {
         success: false,
-        error: error.message,
+        error: errorMessage,
         stageResults: this.stageResults
       };
+      
+      // Log the error to the event stream
+      if (this.eventStream) {
+        try {
+          this.eventStream.addEvent({
+            id: `error_${Date.now()}`,
+            type: 'task.error',
+            timestamp: new Date(),
+            content: {
+              message: errorMessage,
+              taskId: this.id,
+              stageName: this.getCurrentStage()?.name
+            }
+          });
+        } catch (streamError) {
+          console.error('Failed to log error to event stream:', streamError);
+        }
+      }
+      
       throw error;
     }
   }

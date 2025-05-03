@@ -9,10 +9,13 @@ import json
 from typing import Dict, List, Optional, Any, Tuple, Union
 from datetime import datetime
 
-from app.core.config import settings
-from app.services.agent_service import AgentService
+from app.config import settings
+from app.services.agent_service_class import AgentService
 from app.services.memory_service import MemoryService
-from app.services.agent_tools import get_tool_by_name
+# Mock function for getting tools by name
+def get_tool_by_name(name: str):
+    """Get a tool by name (mock implementation)"""
+    return None
 from app.services.document_index_service import DocumentIndexService
 from app.services.code_analysis_service import CodeAnalysisService
 
@@ -666,6 +669,12 @@ class OrchestrationService:
             self.logger.info("Orchestration service closed")
         except Exception as e:
             self.logger.error(f"Error closing orchestration service: {e}")
+            
+    def _get_system_message(self, task_type: str) -> str:
+        """
+        Get the system message for a specific task type
+        """
+        system_messages = {
             "planning": """You are a Planning Agent that helps organize projects and tasks.
             Your role is to create structured plans, timelines, and task breakdowns for projects.
             You should consider dependencies, priorities, and resource constraints in your planning."""

@@ -1,6 +1,7 @@
 import { BaseTask, TaskConfig } from './Task';
 import { Action } from '../events/Action';
 import { Observation } from '../events/Observation';
+import { DefaultEventStream } from '../events/EventStream';
 
 /**
  * Configuration for a simple task
@@ -29,6 +30,11 @@ export class SimpleTask extends BaseTask {
     super(config);
     this.initialAction = config.initialAction;
     this.maxSteps = config.maxSteps || 10;
+    
+    // Initialize event stream if not provided in config
+    if (!this.eventStream) {
+      this.eventStream = new DefaultEventStream();
+    }
   }
   
   /**
@@ -56,10 +62,30 @@ export class SimpleTask extends BaseTask {
         finalObservation: observation
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.result = {
         success: false,
-        error: error.message
+        error: errorMessage
       };
+      
+      // Log the error to the event stream
+      if (this.eventStream) {
+        try {
+          this.eventStream.addEvent({
+            id: `error_${Date.now()}`,
+            type: 'task.error',
+            timestamp: new Date(),
+            content: {
+              message: errorMessage,
+              taskId: this.id,
+              step: this.steps
+            }
+          });
+        } catch (streamError) {
+          console.error('Failed to log error to event stream:', streamError);
+        }
+      }
+      
       throw error;
     }
   }

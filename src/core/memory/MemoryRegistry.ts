@@ -1,11 +1,17 @@
 import { Memory } from './Memory';
 
 /**
- * Registry for managing memory instances
+ * Type for memory factory function
+ */
+export type MemoryFactory = (config: any) => Memory;
+
+/**
+ * Registry for managing memory instances and types
  */
 export class MemoryRegistry {
   private static instance: MemoryRegistry;
   private memories: Map<string, Memory> = new Map();
+  private memoryTypes: Map<string, MemoryFactory> = new Map();
   
   /**
    * Get the singleton instance of the registry
@@ -69,5 +75,38 @@ export class MemoryRegistry {
   async clearAllMemories(): Promise<void> {
     const clearPromises = Array.from(this.memories.values()).map(memory => memory.clear());
     await Promise.all(clearPromises);
+  }
+
+  /**
+   * Register a memory type
+   * @param type The type name
+   * @param factory The factory function to create memories of this type
+   */
+  registerMemoryType(type: string, factory: MemoryFactory): void {
+    this.memoryTypes.set(type, factory);
+  }
+
+  /**
+   * Create a memory of the specified type
+   * @param type The type of memory to create
+   * @param config Configuration for the memory
+   * @returns The created memory instance
+   */
+  createMemory(type: string, config: any): Memory {
+    const factory = this.memoryTypes.get(type);
+    if (!factory) {
+      throw new Error(`Memory type '${type}' not registered`);
+    }
+    const memory = factory(config);
+    this.registerMemory(memory);
+    return memory;
+  }
+
+  /**
+   * Get all registered memory types
+   * @returns Array of memory type names
+   */
+  getMemoryTypes(): string[] {
+    return Array.from(this.memoryTypes.keys());
   }
 }

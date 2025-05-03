@@ -6,7 +6,7 @@ import os
 import tempfile
 from app.services.document_index_service import DocumentIndexService
 from app.api.deps import get_document_index_service
-from app.core.security import get_current_user
+from app.api.deps import get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

@@ -25,28 +25,28 @@ from .docker_sandbox_service import DockerSandboxService
 from .memory_service import memory_service
 from .document_index_service import DocumentIndexService
 
-# Import tool wrappers
+# Import tool functions
 from ..tools.github_tools import (
-    GitHubListReposTool,
-    GitHubCloneRepoTool,
-    GitHubPullTool,
-    GitHubPushTool,
-    GitHubCreateBranchTool
+    github_list_repositories,
+    github_clone_repository,
+    github_pull,
+    github_push,
+    github_create_branch
 )
 from ..tools.code_analysis_tools import (
-    AnalyzePythonCodeTool,
-    AnalyzeJavaScriptCodeTool,
-    AnalyzeTypeScriptCodeTool
+    analyze_python_code,
+    analyze_javascript_code,
+    analyze_typescript_code
 )
 from ..tools.docker_sandbox_tools import (
-    CreateSandboxSessionTool,
-    ExecutePythonCodeTool,
-    ExecuteJavaScriptCodeTool,
-    InstallPackageTool,
-    UploadFileTool,
-    ListFilesTool,
-    ReadFileTool,
-    CloseSandboxSessionTool
+    create_sandbox_session,
+    execute_python_code,
+    execute_javascript_code,
+    install_package,
+    upload_file,
+    list_files,
+    read_file,
+    close_sandbox_session
 )
 
 class LangChainAgentService:
@@ -102,13 +102,17 @@ class LangChainAgentService:
         else:
             raise ValueError(f"Unsupported agent type: {agent_type}")
         
+        # Get current time
+        import time
+        current_time = time.time()
+        
         # Store the agent
         self.agents[agent_id] = {
             "agent": agent,
             "type": agent_type,
             "user_id": user_id,
             "memory": [],  # Store conversation history
-            "created_at": import time; time.time()
+            "created_at": current_time
         }
         
         return agent_id

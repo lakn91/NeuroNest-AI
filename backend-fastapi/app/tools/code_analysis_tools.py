@@ -3,77 +3,59 @@ Code Analysis Tools for LangChain Agents
 """
 
 from typing import Dict, List, Any, Optional
-from langchain.tools import BaseTool, StructuredTool, tool
-from pydantic import BaseModel, Field
+import logging
+from langchain.tools import tool
 
-class AnalyzePythonCodeInput(BaseModel):
-    """Input for AnalyzePythonCodeTool"""
-    code: str = Field(..., description="Python code to analyze")
+# Configure logging
+logger = logging.getLogger(__name__)
 
-class AnalyzePythonCodeTool(BaseTool):
-    """Tool for analyzing Python code"""
+@tool("analyze_python_code")
+def analyze_python_code(code_analysis_service, code: str) -> Dict[str, Any]:
+    """Analyzes Python code for issues, bugs, and structure
     
-    name = "analyze_python_code"
-    description = "Analyzes Python code for issues, bugs, and structure"
-    args_schema = AnalyzePythonCodeInput
-    
-    def __init__(self, code_analysis_service):
-        """Initialize with code analysis service"""
-        self.code_analysis_service = code_analysis_service
-        super().__init__()
-    
-    def _run(self, code: str) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.code_analysis_service.analyze_python_code(code)
-    
-    async def _arun(self, code: str) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(code)
+    Args:
+        code_analysis_service: The code analysis service instance
+        code: Python code to analyze
+        
+    Returns:
+        Dictionary with analysis results
+    """
+    try:
+        return code_analysis_service.analyze_python_code(code)
+    except Exception as e:
+        logger.error(f"Error analyzing Python code: {e}")
+        return {"error": str(e)}
 
-class AnalyzeJavaScriptCodeInput(BaseModel):
-    """Input for AnalyzeJavaScriptCodeTool"""
-    code: str = Field(..., description="JavaScript code to analyze")
+@tool("analyze_javascript_code")
+def analyze_javascript_code(code_analysis_service, code: str) -> Dict[str, Any]:
+    """Analyzes JavaScript code for issues, bugs, and structure
+    
+    Args:
+        code_analysis_service: The code analysis service instance
+        code: JavaScript code to analyze
+        
+    Returns:
+        Dictionary with analysis results
+    """
+    try:
+        return code_analysis_service.analyze_javascript_code(code)
+    except Exception as e:
+        logger.error(f"Error analyzing JavaScript code: {e}")
+        return {"error": str(e)}
 
-class AnalyzeJavaScriptCodeTool(BaseTool):
-    """Tool for analyzing JavaScript code"""
+@tool("analyze_typescript_code")
+def analyze_typescript_code(code_analysis_service, code: str) -> Dict[str, Any]:
+    """Analyzes TypeScript code for issues, bugs, and structure
     
-    name = "analyze_javascript_code"
-    description = "Analyzes JavaScript code for issues, bugs, and structure"
-    args_schema = AnalyzeJavaScriptCodeInput
-    
-    def __init__(self, code_analysis_service):
-        """Initialize with code analysis service"""
-        self.code_analysis_service = code_analysis_service
-        super().__init__()
-    
-    def _run(self, code: str) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.code_analysis_service.analyze_javascript_code(code)
-    
-    async def _arun(self, code: str) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(code)
-
-class AnalyzeTypeScriptCodeInput(BaseModel):
-    """Input for AnalyzeTypeScriptCodeTool"""
-    code: str = Field(..., description="TypeScript code to analyze")
-
-class AnalyzeTypeScriptCodeTool(BaseTool):
-    """Tool for analyzing TypeScript code"""
-    
-    name = "analyze_typescript_code"
-    description = "Analyzes TypeScript code for issues, bugs, and structure"
-    args_schema = AnalyzeTypeScriptCodeInput
-    
-    def __init__(self, code_analysis_service):
-        """Initialize with code analysis service"""
-        self.code_analysis_service = code_analysis_service
-        super().__init__()
-    
-    def _run(self, code: str) -> Dict[str, Any]:
-        """Run the tool"""
-        return self.code_analysis_service.analyze_typescript_code(code)
-    
-    async def _arun(self, code: str) -> Dict[str, Any]:
-        """Run the tool asynchronously"""
-        return self._run(code)
+    Args:
+        code_analysis_service: The code analysis service instance
+        code: TypeScript code to analyze
+        
+    Returns:
+        Dictionary with analysis results
+    """
+    try:
+        return code_analysis_service.analyze_typescript_code(code)
+    except Exception as e:
+        logger.error(f"Error analyzing TypeScript code: {e}")
+        return {"error": str(e)}

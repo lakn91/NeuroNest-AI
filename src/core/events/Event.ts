@@ -21,12 +21,17 @@ export interface Event {
   /**
    * Source of the event (user, agent, system)
    */
-  source: EventSource;
+  source?: EventSource;
   
   /**
    * Optional metadata for the event
    */
   metadata?: Record<string, any>;
+  
+  /**
+   * Optional content for the event
+   */
+  content?: Record<string, any>;
 }
 
 /**

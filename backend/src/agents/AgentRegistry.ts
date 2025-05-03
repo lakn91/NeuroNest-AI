@@ -1,11 +1,12 @@
 import { EventStream } from './EventStream';
 import { LLMProvider } from './LLMProvider';
 import { AgentInterface, AgentConfig } from './AgentInterface';
+import { BaseAgent } from './BaseAgent';
 
 /**
  * Type for agent factory functions
  */
-export type AgentFactory = (eventStream: EventStream, llmProvider: LLMProvider) => AgentInterface;
+export type AgentFactory = (eventStream: EventStream, llmProvider: LLMProvider) => BaseAgent;
 
 /**
  * Registry for agent types and instances

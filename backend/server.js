@@ -40,6 +40,7 @@ const conversationsRouter = require('./routes/conversations');
 const memoriesRouter = require('./routes/memories');
 const runtimeRouter = require('./routes/runtime');
 const settingsRouter = require('./routes/settings');
+const agentRoutes = require('./dist/routes/agentRoutes').default;
 
 app.use('/api/auth', authRouter);
 app.use('/api/projects', projectsRouter);
@@ -47,6 +48,7 @@ app.use('/api/conversations', conversationsRouter);
 app.use('/api/memories', memoriesRouter);
 app.use('/api/runtime', runtimeRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/agents', agentRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

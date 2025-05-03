@@ -68,6 +68,17 @@ export class TaskManager {
   }
   
   /**
+   * Get active tasks (running or pending)
+   * @returns Array of active tasks
+   */
+  getActiveTasks(): Task[] {
+    return this.getAllTasks().filter(task => 
+      task.status === TaskStatus.RUNNING || 
+      task.status === TaskStatus.PENDING
+    );
+  }
+  
+  /**
    * Get tasks by priority
    * @param priority The priority to filter by
    * @returns Array of tasks with the specified priority
@@ -157,5 +168,35 @@ export class TaskManager {
     
     this.tasks.clear();
     this.runningTasks.clear();
+  }
+  
+  /**
+   * Execute a task (alias for runTask for compatibility)
+   * @param task The task to execute
+   * @returns The result of the task
+   */
+  async executeTask(task: Task): Promise<any> {
+    // Add the task if it's not already added
+    if (!this.tasks.has(task.id)) {
+      this.addTask(task);
+    }
+    
+    // Run the task immediately
+    try {
+      this.runningTasks.add(task.id);
+      task.status = TaskStatus.RUNNING;
+      
+      // Use start() method and then get the result
+      await task.start();
+      const result = task.getResult();
+      
+      task.status = TaskStatus.COMPLETED;
+      this.runningTasks.delete(task.id);
+      return result;
+    } catch (error) {
+      task.status = TaskStatus.FAILED;
+      this.runningTasks.delete(task.id);
+      throw error;
+    }
   }
 }

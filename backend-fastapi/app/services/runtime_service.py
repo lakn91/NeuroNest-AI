@@ -14,10 +14,10 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 import aiofiles
 
-from app.core.config import settings
+from app.config import settings
 from app.models.execution import RuntimeEnvironment, RuntimeStatus, RuntimeLog
-from app.services.docker_service import DockerService
-from app.services.file_service import FileService
+from app.services.docker_service_class import DockerService
+from app.services.file_service_class import FileService
 
 logger = logging.getLogger(__name__)
 

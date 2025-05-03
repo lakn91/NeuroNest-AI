@@ -2,6 +2,17 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+class User(BaseModel):
+    """User model"""
+    id: str
+    email: str
+    name: Optional[str] = None
+    is_active: bool = True
+    
+class UserInDB(User):
+    """User model with password hash"""
+    hashed_password: str
+
 class UserBase(BaseModel):
     email: EmailStr
     

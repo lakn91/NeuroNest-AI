@@ -41,6 +41,7 @@ try {
   }
 } catch (error) {
   console.error('Error initializing Firebase Admin SDK:', error);
+  console.warn('Continuing without Firebase...');
 }
 
 // Create Express app
@@ -79,12 +80,11 @@ const connectDB = async () => {
     console.log('MongoDB connected successfully');
   } catch (error) {
     console.error('MongoDB connection error:', error);
-    process.exit(1);
+    console.warn('Continuing without MongoDB...');
   }
 };
 
-// Import routes and agent registry
-import routes from './routes';
+// Import agent registry
 import { 
   AgentRegistry, 
   ThinkingAgent, 
@@ -114,8 +114,11 @@ app.get('/', (req, res) => {
   res.send('NeuroNest-AI API is running');
 });
 
+// Import routes
+import agentRoutes from './routes/agentRoutes';
+
 // API routes
-app.use('/api', routes);
+app.use('/api/agents', agentRoutes);
 
 // Import LLM service
 import { createLLMProvider } from './services/llmService';
@@ -224,7 +227,7 @@ io.on('connection', (socket) => {
       }
       
       // Send responses back to client
-      responses.forEach(response => {
+      responses.forEach((response: any) => {
         socket.emit('agent-response', response);
       });
       

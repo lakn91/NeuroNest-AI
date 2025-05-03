@@ -47,6 +47,14 @@ export class VectorMemory extends BaseMemory {
   }
   
   /**
+   * Alternative constructor for factory pattern
+   * @param config Configuration with name and other settings
+   */
+  static create(config: VectorMemoryConfig & { name: string }): VectorMemory {
+    return new VectorMemory(config.name, config);
+  }
+  
+  /**
    * Add an event to the vector memory
    * @param event The event to add
    */
@@ -82,7 +90,7 @@ export class VectorMemory extends BaseMemory {
       }
       
       if (filter.source) {
-        result = result.filter(event => event.source.toString() === filter.source);
+        result = result.filter(event => event.source && event.source.toString() === filter.source);
       }
       
       if (filter.timeRange) {

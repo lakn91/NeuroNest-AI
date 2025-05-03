@@ -190,7 +190,7 @@ Provide the improved version along with a brief explanation of the changes made.
       return improvedLines.join('\n');
     } else {
       // For text content, add some improvements
-      return content + '\n\n[Editor's note: This content has been reviewed and enhanced for clarity and effectiveness.]';
+      return content + '\n\n[Editor\'s note: This content has been reviewed and enhanced for clarity and effectiveness.]';
     }
   }
 }

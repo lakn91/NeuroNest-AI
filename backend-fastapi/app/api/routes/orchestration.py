@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 import logging
 from app.services.orchestration_service import OrchestrationService
+from app.api.deps import get_orchestration_service, get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

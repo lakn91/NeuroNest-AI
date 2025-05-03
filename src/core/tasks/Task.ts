@@ -1,5 +1,6 @@
 import { Event } from '../events/Event';
 import { Agent } from '../agents/Agent';
+import { EventStream } from '../events/EventStream';
 
 /**
  * Status of a task
@@ -82,6 +83,11 @@ export interface Task {
   events: Event[];
   
   /**
+   * Event stream for managing events
+   */
+  eventStream: EventStream;
+  
+  /**
    * Start the task
    */
   start(): Promise<void>;
@@ -146,6 +152,11 @@ export interface TaskConfig {
   parentTask?: Task;
   
   /**
+   * Event stream for the task
+   */
+  eventStream?: EventStream;
+  
+  /**
    * Additional configuration options
    */
   [key: string]: any;
@@ -166,6 +177,7 @@ export abstract class BaseTask implements Task {
   parentTask?: Task;
   subtasks: Task[] = [];
   events: Event[] = [];
+  eventStream!: EventStream; // Using definite assignment assertion
   protected result: any = null;
   
   constructor(config: TaskConfig) {
@@ -176,6 +188,11 @@ export abstract class BaseTask implements Task {
     this.priority = config.priority || TaskPriority.MEDIUM;
     this.agent = config.agent;
     this.parentTask = config.parentTask;
+    
+    // Initialize event stream if provided in config, otherwise it will need to be set by subclasses
+    if (config.eventStream) {
+      this.eventStream = config.eventStream;
+    }
   }
   
   /**
@@ -202,7 +219,9 @@ export abstract class BaseTask implements Task {
       this.status = TaskStatus.COMPLETED;
     } catch (error) {
       this.status = TaskStatus.FAILED;
-      this.result = { error: error.message };
+      this.result = { 
+        error: error instanceof Error ? error.message : String(error)
+      };
     }
     
     this.endTime = new Date();

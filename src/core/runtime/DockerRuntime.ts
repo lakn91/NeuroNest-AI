@@ -40,10 +40,10 @@ export interface DockerRuntimeConfig extends RuntimeConfig {
  * Runtime implementation that uses Docker for secure execution
  */
 export class DockerRuntime extends BaseRuntime {
-  private baseImage: string;
-  private workingDir: string;
-  private mountDir: string;
-  private keepContainers: boolean;
+  private baseImage: string = 'node:18-alpine';
+  private workingDir: string = '/app';
+  private mountDir: string = './data';
+  private keepContainers: boolean = false;
   private containers: Map<string, string> = new Map();
   
   constructor() {

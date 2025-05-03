@@ -52,7 +52,7 @@ export class BufferMemory extends BaseMemory {
       }
       
       if (filter.source) {
-        result = result.filter(event => event.source.toString() === filter.source);
+        result = result.filter(event => event.source && event.source.toString() === filter.source);
       }
       
       if (filter.timeRange) {

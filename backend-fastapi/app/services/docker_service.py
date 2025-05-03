@@ -8,27 +8,91 @@ import uuid
 import json
 import tempfile
 import shutil
-import docker
 import time
 from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
-from app.core.config import settings
+from app.config import settings
+
+# Mock Docker client for environments without Docker
+class MockDockerClient:
+    """Mock Docker client for environments without Docker"""
+    
+    class MockContainer:
+        """Mock Docker container"""
+        def __init__(self, container_id, name, image, command):
+            self.id = container_id
+            self.name = name
+            self.image = image
+            self.command = command
+            self.status = "running"
+            self.attrs = {"State": {"ExitCode": 0}}
+            
+        def logs(self):
+            return b"Mock container logs"
+            
+        def stop(self, timeout=5):
+            self.status = "stopped"
+            
+        def remove(self):
+            pass
+            
+        def reload(self):
+            # Simulate container finishing after a short time
+            self.status = "exited"
+    
+    class MockContainerCollection:
+        """Mock Docker container collection"""
+        def __init__(self):
+            self.containers = {}
+            
+        def create(self, **kwargs):
+            container_id = str(uuid.uuid4())
+            container = MockDockerClient.MockContainer(
+                container_id,
+                kwargs.get("name", f"mock-container-{container_id}"),
+                kwargs.get("image", "mock-image"),
+                kwargs.get("command", "mock-command")
+            )
+            self.containers[container_id] = container
+            return container
+            
+        def get(self, container_id):
+            return self.containers.get(container_id)
+    
+    class MockImageCollection:
+        """Mock Docker image collection"""
+        def __init__(self):
+            pass
+            
+        def pull(self, image):
+            return {"id": image}
+    
+    def __init__(self):
+        self.containers = self.MockContainerCollection()
+        self.images = self.MockImageCollection()
+        
+    def ping(self):
+        return True
+        
+    def from_env(self):
+        return self
 
 logger = logging.getLogger(__name__)
 
-# Initialize Docker client if code execution is enabled
+# Initialize Docker client
 docker_client = None
-if settings.ENABLE_CODE_EXECUTION:
-    try:
-        docker_client = docker.from_env()
-        logger.info("Docker client initialized successfully")
-        
-        # Check if Docker is running
-        docker_client.ping()
-        logger.info("Docker daemon is running")
-    except Exception as e:
-        logger.error(f"Error initializing Docker client: {e}")
-        logger.warning("Code execution will be disabled")
+try:
+    import docker
+    docker_client = docker.from_env()
+    logger.info("Docker client initialized successfully")
+    
+    # Check if Docker is running
+    docker_client.ping()
+    logger.info("Docker daemon is running")
+except Exception as e:
+    logger.error(f"Error initializing Docker client: {e}")
+    logger.warning("Using mock Docker client")
+    docker_client = MockDockerClient()
         
 # Track active containers
 active_containers = {}

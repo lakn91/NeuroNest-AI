@@ -26,14 +26,34 @@ export class RuntimeRegistry {
   
   /**
    * Register a runtime
-   * @param runtime The runtime to register
+   * @param name The name of the runtime or the runtime instance
+   * @param runtime The runtime to register or isDefault flag
    * @param isDefault Whether this runtime should be the default
    */
-  registerRuntime(runtime: Runtime, isDefault: boolean = false): void {
-    this.runtimes.set(runtime.name, runtime);
+  registerRuntime(name: string | Runtime, runtime?: Runtime | boolean, isDefault: boolean = false): void {
+    // Handle both overloads:
+    // 1. registerRuntime(runtime, isDefault)
+    // 2. registerRuntime(name, runtimeFactory, isDefault)
+    let runtimeName: string;
+    let runtimeInstance: Runtime;
+    
+    if (typeof name === 'string' && runtime && typeof runtime !== 'boolean') {
+      // Overload 2: name and runtime provided separately
+      runtimeName = name;
+      runtimeInstance = runtime;
+    } else if (typeof name !== 'string') {
+      // Overload 1: runtime object provided directly
+      runtimeInstance = name;
+      runtimeName = runtimeInstance.name;
+      isDefault = runtime !== undefined ? Boolean(runtime) : false;
+    } else {
+      throw new Error('Invalid arguments to registerRuntime');
+    }
+    
+    this.runtimes.set(runtimeName, runtimeInstance);
     
     if (isDefault || this.defaultRuntime === null) {
-      this.defaultRuntime = runtime.name;
+      this.defaultRuntime = runtimeName;
     }
   }
   
