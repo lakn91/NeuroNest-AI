@@ -1,110 +1,218 @@
 # NeuroNest-AI Backend
 
-## Overview
+## نظرة عامة
 
-This directory contains the backend for the NeuroNest-AI project. It's built using Node.js/Express and provides the API endpoints and server-side logic for the application.
+هذا المجلد يحتوي على الخادم الخلفي لمشروع NeuroNest-AI. تم بناؤه باستخدام Node.js/Express ويوفر نقاط نهاية API والمنطق الخلفي للتطبيق.
 
-## Structure
+## البنية الجديدة
+
+تم تحديث النظام لاستخدام بنية قائمة على الأحداث (Event-Driven Architecture) مع واجهات موحدة للعملاء ومزودي نماذج اللغة.
+
+### المكونات الرئيسية
+
+- **AgentInterface**: واجهة موحدة لجميع العملاء
+- **BaseAgent**: فئة أساسية تنفذ الوظائف المشتركة
+- **EventStream**: نظام لنقل الأحداث بين العملاء
+- **LLMProvider**: واجهة موحدة لمزودي نماذج اللغة
+- **AgentRegistry**: نظام مركزي لإدارة أنواع وحالات العملاء
+
+## هيكل المشروع
 
 ```
 backend/
-├── config/           # Configuration files
-├── controllers/      # Request handlers
-├── middleware/       # Express middleware
-├── models/           # Data models
-├── routes/           # API route definitions
-├── services/         # Business logic
-├── utils/            # Helper functions
-├── .env.example      # Example environment file
-├── package.json      # Project dependencies
-└── server.js         # Main server file
+├── config/           # ملفات التكوين
+├── controllers/      # معالجات الطلبات
+├── middleware/       # وسيط Express
+├── models/           # نماذج البيانات
+├── routes/           # تعريفات مسارات API
+├── services/         # منطق الأعمال
+├── src/              # كود TypeScript المصدري
+│   ├── agents/       # نظام العملاء الجديد
+│   ├── controllers/  # معالجات الطلبات بـ TypeScript
+│   ├── routes/       # مسارات API بـ TypeScript
+│   └── services/     # خدمات بـ TypeScript
+├── utils/            # دوال مساعدة
+├── .env.example      # مثال لملف البيئة
+├── package.json      # تبعيات المشروع
+└── server.js         # ملف الخادم الرئيسي
 ```
 
-## Main Components
+## المكونات الرئيسية
 
-### Routes
+### العملاء (Agents)
 
-- **auth.js**: Authentication endpoints (register, login, logout).
-- **projects.js**: Project management endpoints.
-- **conversations.js**: Conversation history endpoints.
-- **memories.js**: Agent memory endpoints.
-- **runtime.js**: Code execution environment endpoints.
-- **settings.js**: User settings endpoints.
+- **ThinkingAgent**: عميل متخصص في التفكير العميق وحل المشكلات.
+- **DeveloperAgent**: عميل متخصص في تطوير البرمجيات وكتابة الكود.
+- **EditorAgent**: عميل متخصص في تحرير النصوص والملفات.
+- **OrchestratorAgent**: عميل رئيسي يقوم بتنسيق العمل بين العملاء المتخصصين.
 
-### Services
+### الخدمات
 
-- **firebaseService.js**: Firebase integration.
-- **supabaseService.js**: Supabase integration.
-- **agentService.js**: Agent orchestration logic.
-- **runtimeService.js**: Code execution environment.
+- **llmService**: خدمة للتعامل مع مزودي نماذج اللغة المختلفة (OpenAI و Google Gemini).
+- **firebaseService**: تكامل مع Firebase.
+- **supabaseService**: تكامل مع Supabase.
+- **runtimeService**: بيئة تنفيذ الكود.
 
-## API Endpoints
+## نقاط نهاية API
 
-### Authentication
+### العملاء (Agents)
 
-- `POST /api/auth/register`: Register a new user.
-- `POST /api/auth/login`: Log in a user.
-- `POST /api/auth/logout`: Log out a user.
-- `GET /api/auth/user`: Get the current user.
+- `POST /api/agents/process`: معالجة رسالة من خلال نظام العملاء.
+- `GET /api/agents`: الحصول على معلومات حول العملاء المتاحين.
+- `GET /api/agents/providers`: الحصول على مزودي نماذج اللغة المدعومين.
 
-### Projects
+### المصادقة (Authentication)
 
-- `GET /api/projects`: Get all projects for the current user.
-- `GET /api/projects/:id`: Get a specific project.
-- `POST /api/projects`: Create a new project.
-- `PUT /api/projects/:id`: Update a project.
-- `DELETE /api/projects/:id`: Delete a project.
-- `GET /api/projects/:id/files`: Get all files for a project.
-- `POST /api/projects/:id/files`: Add a file to a project.
+- `POST /api/auth/register`: تسجيل مستخدم جديد.
+- `POST /api/auth/login`: تسجيل دخول مستخدم.
+- `POST /api/auth/logout`: تسجيل خروج مستخدم.
+- `GET /api/auth/user`: الحصول على المستخدم الحالي.
 
-### Conversations
+### المشاريع (Projects)
 
-- `GET /api/conversations`: Get all conversations for the current user.
-- `GET /api/conversations/:id`: Get a specific conversation.
-- `POST /api/conversations`: Create a new conversation.
-- `PUT /api/conversations/:id`: Update a conversation.
-- `DELETE /api/conversations/:id`: Delete a conversation.
+- `GET /api/projects`: الحصول على جميع المشاريع للمستخدم الحالي.
+- `GET /api/projects/:id`: الحصول على مشروع محدد.
+- `POST /api/projects`: إنشاء مشروع جديد.
+- `PUT /api/projects/:id`: تحديث مشروع.
+- `DELETE /api/projects/:id`: حذف مشروع.
+- `GET /api/projects/:id/files`: الحصول على جميع ملفات مشروع.
+- `POST /api/projects/:id/files`: إضافة ملف إلى مشروع.
 
-### Agent Memory
+### المحادثات (Conversations)
 
-- `GET /api/memories/:agentId`: Get memories for a specific agent.
-- `POST /api/memories/:agentId`: Add a memory for an agent.
-- `DELETE /api/memories/:agentId/:memoryId`: Delete a specific memory.
+- `GET /api/conversations`: الحصول على جميع المحادثات للمستخدم الحالي.
+- `GET /api/conversations/:id`: الحصول على محادثة محددة.
+- `POST /api/conversations`: إنشاء محادثة جديدة.
+- `PUT /api/conversations/:id`: تحديث محادثة.
+- `DELETE /api/conversations/:id`: حذف محادثة.
 
-## Installation and Running
+### ذاكرة العميل (Agent Memory)
 
-1. Install dependencies:
+- `GET /api/memories/:agentId`: الحصول على ذكريات لعميل محدد.
+- `POST /api/memories/:agentId`: إضافة ذاكرة لعميل.
+- `DELETE /api/memories/:agentId/:memoryId`: حذف ذاكرة محددة.
+
+## استخدام النظام الجديد
+
+### إنشاء عميل جديد
+
+```typescript
+import { BaseAgent, EventStream, LLMProvider, Action, Observation } from './agents';
+
+export class MyAgent extends BaseAgent {
+  constructor(eventStream: EventStream, llmProvider: LLMProvider) {
+    super(eventStream, llmProvider);
+  }
+  
+  async initialize(config: AgentConfig): Promise<void> {
+    await super.initialize(config);
+    // إعداد إضافي
+  }
+  
+  async process(observation: Observation): Promise<Action> {
+    // معالجة الملاحظة
+    // إنشاء إجراء
+    return Action.createTextAction(this.id, 'نص الاستجابة');
+  }
+}
+```
+
+### تسجيل نوع العميل
+
+```typescript
+import { AgentRegistry } from './agents';
+import { MyAgent } from './MyAgent';
+
+const registry = AgentRegistry.getInstance();
+registry.registerAgentType('my-agent', (es, llm) => new MyAgent(es, llm));
+```
+
+### معالجة رسالة
+
+```typescript
+const observation = Observation.createUserMessageObservation('user', 'رسالة المستخدم');
+const action = await agent.process(observation);
+console.log(action.data);
+```
+
+## التثبيت والتشغيل
+
+1. تثبيت التبعيات:
    ```bash
    npm install
    ```
 
-2. Copy `.env.example` to `.env` and modify values as needed.
+2. نسخ `.env.example` إلى `.env` وتعديل القيم حسب الحاجة.
 
-3. Run the server:
+3. تشغيل الخادم:
    ```bash
    npm start
    ```
 
-   For development with auto-restart:
+   للتطوير مع إعادة التشغيل التلقائي:
    ```bash
    npm run dev
    ```
 
-## Environment Variables
+   لتشغيل الخادم بـ TypeScript:
+   ```bash
+   npm run dev:ts
+   ```
 
-- `PORT`: Server port (default: 5000)
-- `NODE_ENV`: Environment (development, production)
-- `FIREBASE_API_KEY`: Firebase API key
-- `FIREBASE_AUTH_DOMAIN`: Firebase auth domain
-- `FIREBASE_PROJECT_ID`: Firebase project ID
-- `FIREBASE_STORAGE_BUCKET`: Firebase storage bucket
-- `FIREBASE_MESSAGING_SENDER_ID`: Firebase messaging sender ID
-- `FIREBASE_APP_ID`: Firebase app ID
-- `SUPABASE_URL`: Supabase URL
-- `SUPABASE_KEY`: Supabase API key
-- `JWT_SECRET`: Secret for JWT tokens
-- `OPENROUTER_API_KEY`: OpenRouter API key
+## اختبار النظام
 
-## Documentation
+يمكنك اختبار النظام باستخدام الأمر التالي:
 
-For more information about specific endpoints and functions, see the comments in the code.
+```bash
+# تشغيل اختبار العملاء
+./src/tests/run-test.sh
+```
+
+## المتغيرات البيئية
+
+- `PORT`: منفذ الخادم (الافتراضي: 5000)
+- `NODE_ENV`: البيئة (development, production)
+- `FIREBASE_PROJECT_ID`: معرف مشروع Firebase
+- `FIREBASE_CLIENT_EMAIL`: بريد إلكتروني لعميل Firebase
+- `FIREBASE_PRIVATE_KEY`: مفتاح خاص لـ Firebase
+- `FIREBASE_DATABASE_URL`: عنوان URL لقاعدة بيانات Firebase
+- `FIREBASE_STORAGE_BUCKET`: سلة تخزين Firebase
+- `SUPABASE_URL`: عنوان URL لـ Supabase
+- `SUPABASE_KEY`: مفتاح API لـ Supabase
+- `JWT_SECRET`: سر لرموز JWT
+- `OPENAI_API_KEY`: مفتاح API لـ OpenAI
+- `GEMINI_API_KEY`: مفتاح API لـ Google Gemini
+- `DEFAULT_AI_PROVIDER`: مزود الذكاء الاصطناعي الافتراضي (gemini أو openai)
+
+## Socket.IO
+
+يمكنك استخدام Socket.IO للتفاعل مع النظام في الوقت الفعلي:
+
+```javascript
+// إرسال رسالة
+socket.emit('user-message', {
+  message: 'رسالة المستخدم',
+  context: {
+    apiSettings: {
+      provider: 'gemini',
+      apiKey: 'your-api-key'
+    }
+  }
+});
+
+// استقبال استجابة
+socket.on('agent-response', (response) => {
+  console.log(response);
+});
+
+// استقبال إجراء
+socket.on('agent-action', (action) => {
+  console.log(action);
+});
+```
+
+## التوثيق
+
+لمزيد من المعلومات حول نقاط النهاية والوظائف المحددة، راجع التعليقات في الكود.
+
+للحصول على معلومات حول التحديثات الأخيرة، راجع ملف `/docs/UPDATES.md`.

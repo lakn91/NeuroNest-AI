@@ -1,5 +1,9 @@
 import { BaseAgent } from './BaseAgent';
-import { AgentResponse } from './AgentInterface';
+import { AgentResponse, AgentConfig } from './AgentInterface';
+import { EventStream } from './EventStream';
+import { LLMProvider } from './LLMProvider';
+import { Action } from './Action';
+import { Observation } from './Observation';
 import langchainUtils from '../utils/langchain';
 
 /**
@@ -8,11 +12,13 @@ import langchainUtils from '../utils/langchain';
 export class DeveloperAgent extends BaseAgent {
   private developerChain;
   
-  constructor() {
-    super(
-      'Developer Agent',
-      'Generates code based on specifications'
-    );
+  /**
+   * Create a new DeveloperAgent
+   * @param eventStream The event stream for the agent
+   * @param llmProvider The LLM provider for the agent
+   */
+  constructor(eventStream: EventStream, llmProvider: LLMProvider) {
+    super(eventStream, llmProvider);
     
     try {
       this.developerChain = langchainUtils.createDeveloperAgentChain();
@@ -22,13 +28,52 @@ export class DeveloperAgent extends BaseAgent {
   }
   
   /**
-   * Process a message and generate code
-   * @param message The message to process
-   * @param context Additional context including language and specifications
-   * @returns Generated code
+   * Initialize the agent
+   * @param config Configuration for the agent
    */
-  async process(message: string, context?: any): Promise<AgentResponse> {
+  async initialize(config: AgentConfig): Promise<void> {
+    await super.initialize(config);
+    
+    // Set default system message if not provided
+    if (!this.systemMessage) {
+      this.systemMessage = `You are a senior software developer specializing in multiple programming languages.
+Your task is to generate high-quality, production-ready code based on the requirements provided.
+
+Guidelines:
+1. Write clean, efficient, and well-documented code
+2. Follow best practices and design patterns for the specified language
+3. Include appropriate error handling
+4. Structure the code logically
+5. Include comments to explain complex logic
+6. If a framework is specified, use it appropriately
+7. Include any necessary imports or dependencies
+
+The code should be complete and ready to use without requiring significant modifications.`;
+    }
+  }
+  
+  /**
+   * Process an observation and generate an action
+   * @param observation The observation to process
+   * @returns The action to take
+   */
+  async process(observation: Observation): Promise<Action> {
     try {
+      // Extract message and context from observation
+      let message = '';
+      let context: any = {};
+      
+      if (observation.data.type === 'user_message') {
+        message = observation.data.message;
+        context = observation.data.context || {};
+      } else if (observation.data.type === 'text') {
+        message = observation.data.content;
+        context = observation.data.context || {};
+      } else {
+        // For other observation types, convert to string
+        message = JSON.stringify(observation.data);
+      }
+      
       const language = context?.language || 'html';
       const fileType = context?.fileType || this.getFileTypeFromLanguage(language);
       
@@ -50,11 +95,35 @@ export class DeveloperAgent extends BaseAgent {
         code = this.generateMockCode(language, message);
       }
       
-      return this.createCodeResponse(code, language);
+      // Create a code action
+      return Action.createCodeAction(this.id, code, language);
     } catch (error) {
       console.error('Error in DeveloperAgent:', error);
-      return this.createErrorResponse('Failed to generate code');
+      return Action.createErrorAction(this.id, 'Failed to generate code');
     }
+  }
+  
+  /**
+   * Legacy method for backward compatibility
+   * @param message The message to process
+   * @param context Additional context including language and specifications
+   * @returns Generated code
+   * @deprecated Use process(observation) instead
+   */
+  async processMessage(message: string, context?: any): Promise<AgentResponse> {
+    // Create an observation from the message
+    const observation = Observation.createUserMessageObservation('user', message);
+    
+    // Add context to the observation if provided
+    if (context) {
+      observation.data.context = context;
+    }
+    
+    // Process the observation
+    const action = await this.process(observation);
+    
+    // Convert the action to a legacy response
+    return this.actionToLegacyResponse(action);
   }
   
   /**

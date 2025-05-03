@@ -16,6 +16,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@langchain/google-genai": "^0.1.10",
     "@langchain/openai": "^0.5.7",
     "@supabase/supabase-js": "^2.39.7",
     "axios": "^1.9.0",

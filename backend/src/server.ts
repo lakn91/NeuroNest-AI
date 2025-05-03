@@ -83,8 +83,31 @@ const connectDB = async () => {
   }
 };
 
-// Import routes
+// Import routes and agent registry
 import routes from './routes';
+import { 
+  AgentRegistry, 
+  ThinkingAgent, 
+  DeveloperAgent, 
+  EditorAgent, 
+  OrchestratorAgent 
+} from './agents';
+
+// Initialize agent registry
+const initializeAgentRegistry = () => {
+  const registry = AgentRegistry.getInstance();
+  
+  // Register agent types
+  registry.registerAgentType('thinking', (es, llm) => new ThinkingAgent(es, llm));
+  registry.registerAgentType('developer', (es, llm) => new DeveloperAgent(es, llm));
+  registry.registerAgentType('editor', (es, llm) => new EditorAgent(es, llm));
+  registry.registerAgentType('orchestrator', (es, llm) => new OrchestratorAgent(es, llm));
+  
+  console.log('Agent registry initialized with agent types:', registry.getAgentTypes());
+};
+
+// Initialize agent registry
+initializeAgentRegistry();
 
 // Routes
 app.get('/', (req, res) => {
@@ -93,6 +116,10 @@ app.get('/', (req, res) => {
 
 // API routes
 app.use('/api', routes);
+
+// Import LLM service
+import { createLLMProvider } from './services/llmService';
+import { DefaultEventStream, Observation } from './agents';
 
 // Socket.io connection handler
 io.on('connection', (socket) => {
@@ -103,16 +130,114 @@ io.on('connection', (socket) => {
   });
   
   // Handle user messages
-  socket.on('user-message', async (message) => {
-    console.log('Received message:', message);
-    
-    // TODO: Process message through agent system
-    
-    // Send response back to client
-    socket.emit('agent-response', {
-      type: 'text',
-      content: 'Your message has been received. Agent processing will be implemented soon.'
-    });
+  socket.on('user-message', async (data) => {
+    try {
+      const { message, context } = data;
+      console.log('Received message:', message);
+      
+      if (!message) {
+        socket.emit('agent-response', {
+          type: 'error',
+          content: 'Message is required'
+        });
+        return;
+      }
+      
+      // Extract API settings from context
+      const apiSettings = {
+        provider: context?.apiSettings?.provider || process.env.DEFAULT_AI_PROVIDER || 'gemini',
+        apiKey: context?.apiSettings?.apiKey || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY,
+        modelName: context?.apiSettings?.modelName,
+        temperature: context?.apiSettings?.temperature
+      };
+      
+      // Add API settings to context
+      const enrichedContext = {
+        ...context,
+        apiSettings,
+        socketId: socket.id
+      };
+      
+      // Create LLM provider based on API settings
+      let llmProvider;
+      
+      if (apiSettings.apiKey) {
+        try {
+          llmProvider = createLLMProvider(
+            apiSettings.provider,
+            apiSettings.apiKey,
+            {
+              modelName: apiSettings.modelName,
+              temperature: apiSettings.temperature
+            }
+          );
+        } catch (error) {
+          console.error('Error creating LLM provider:', error);
+          socket.emit('agent-response', {
+            type: 'error',
+            content: 'Failed to initialize AI provider'
+          });
+          return;
+        }
+      } else {
+        socket.emit('agent-response', {
+          type: 'error',
+          content: 'No API key provided. Please configure your API key in settings.'
+        });
+        return;
+      }
+      
+      // Get the agent registry
+      const registry = AgentRegistry.getInstance();
+      
+      // Create a new event stream that emits events to the socket
+      const eventStream = new DefaultEventStream();
+      eventStream.on('action', (action) => {
+        socket.emit('agent-action', action);
+      });
+      
+      // Create an orchestrator agent
+      const orchestrator = await registry.createAgent(
+        'orchestrator',
+        { 
+          id: `orchestrator-${socket.id}`, 
+          name: 'Orchestrator Agent', 
+          description: 'Coordinates between agents and manages workflow' 
+        },
+        eventStream,
+        llmProvider
+      );
+      
+      // Create an observation from the message
+      const observation = Observation.createUserMessageObservation('user', message);
+      observation.data.context = enrichedContext;
+      
+      // Process the observation
+      const action = await orchestrator.process(observation);
+      
+      // Convert the action to a response format
+      let responses;
+      if (action.data.type === 'composite' && Array.isArray(action.data.responses)) {
+        responses = action.data.responses;
+      } else {
+        responses = [action.data];
+      }
+      
+      // Send responses back to client
+      responses.forEach(response => {
+        socket.emit('agent-response', response);
+      });
+      
+      // Clean up the agent when done
+      registry.removeAgent(orchestrator.id);
+      
+    } catch (error) {
+      console.error('Error processing message:', error);
+      socket.emit('agent-response', {
+        type: 'error',
+        content: 'Failed to process message'
+      });
+    }
   });
 });
 
