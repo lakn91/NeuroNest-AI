@@ -80,6 +80,14 @@ export class NeuroNest {
   private initialized: boolean = false;
   
   /**
+   * Get the agent registry
+   * @returns The agent registry
+   */
+  public getAgentManager(): AgentRegistry {
+    return this.agentRegistry;
+  }
+  
+  /**
    * Get the singleton instance of the application
    */
   public static getInstance(): NeuroNest {
@@ -144,14 +152,22 @@ export class NeuroNest {
       this.registerRuntimeEnvironments();
       
       // Load plugins
-      if (config.pluginDir) {
-        await this.pluginManager.loadPluginsFromDirectory(config.pluginDir);
+      if (config.pluginDir && typeof this.pluginManager.loadPluginsFromDirectory === 'function') {
+        try {
+          await this.pluginManager.loadPluginsFromDirectory(config.pluginDir);
+        } catch (pluginError) {
+          const errorMessage = pluginError instanceof Error ? pluginError.message : String(pluginError);
+          this.logger.warn(`Failed to load plugins: ${errorMessage}`, 'NeuroNest');
+        }
+      } else if (config.pluginDir) {
+        this.logger.warn('Plugin manager does not have loadPluginsFromDirectory method, skipping plugin loading', 'NeuroNest');
       }
       
       this.initialized = true;
       this.logger.info('NeuroNest initialized successfully', 'NeuroNest');
     } catch (error) {
-      this.logger.error(`Failed to initialize NeuroNest: ${error.message}`, 'NeuroNest', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to initialize NeuroNest: ${errorMessage}`, 'NeuroNest', error);
       throw error;
     }
   }
@@ -160,29 +176,51 @@ export class NeuroNest {
    * Register LLM providers
    */
   private registerLLMProviders(): void {
-    // Register OpenAI provider
-    if (this.config.apiKeys?.openai) {
-      const openaiProvider = new OpenAIProvider({
-        apiKey: this.config.apiKeys.openai
-      });
-      this.llmRegistry.registerProvider('openai', openaiProvider);
-      this.logger.info('Registered OpenAI provider', 'NeuroNest');
+    // Check if llmRegistry exists and has the registerProvider method
+    if (!this.llmRegistry || typeof this.llmRegistry.registerProvider !== 'function') {
+      this.logger.warn('LLM registry is not properly initialized or does not have registerProvider method, skipping LLM provider registration', 'NeuroNest');
+      return;
     }
     
-    // Additional providers can be registered here
+    try {
+      // Register OpenAI provider
+      if (this.config.apiKeys?.openai) {
+        const openaiProvider = new OpenAIProvider({
+          apiKey: this.config.apiKeys.openai
+        });
+        this.llmRegistry.registerProvider('openai', openaiProvider);
+        this.logger.info('Registered OpenAI provider', 'NeuroNest');
+      }
+      
+      // Additional providers can be registered here
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to register LLM providers: ${errorMessage}`, 'NeuroNest');
+    }
   }
   
   /**
    * Register memory types
    */
   private registerMemoryTypes(): void {
-    // Register buffer memory
-    this.memoryRegistry.registerMemoryType('buffer', (config) => new BufferMemory(config));
-    this.logger.info('Registered buffer memory type', 'NeuroNest');
+    // Check if memoryRegistry exists and has the registerMemoryType method
+    if (!this.memoryRegistry || typeof this.memoryRegistry.registerMemoryType !== 'function') {
+      this.logger.warn('Memory registry is not properly initialized or does not have registerMemoryType method, skipping memory registration', 'NeuroNest');
+      return;
+    }
     
-    // Register vector memory
-    this.memoryRegistry.registerMemoryType('vector', (config) => new VectorMemory(config));
-    this.logger.info('Registered vector memory type', 'NeuroNest');
+    try {
+      // Register buffer memory
+      this.memoryRegistry.registerMemoryType('buffer', (config) => new BufferMemory(config.name, config));
+      this.logger.info('Registered buffer memory type', 'NeuroNest');
+      
+      // Register vector memory
+      this.memoryRegistry.registerMemoryType('vector', (config) => VectorMemory.create(config));
+      this.logger.info('Registered vector memory type', 'NeuroNest');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to register memory types: ${errorMessage}`, 'NeuroNest');
+    }
     
     // Additional memory types can be registered here
   }
@@ -191,23 +229,34 @@ export class NeuroNest {
    * Register agent types
    */
   private registerAgentTypes(): void {
-    // Register thinking agent
-    this.agentRegistry.registerAgentType('thinking', (eventStream, llmProvider) => {
-      return new ThinkingAgent(eventStream, llmProvider);
-    });
-    this.logger.info('Registered thinking agent type', 'NeuroNest');
+    // Check if agentRegistry exists and has the registerAgentType method
+    if (!this.agentRegistry || typeof this.agentRegistry.registerAgentType !== 'function') {
+      this.logger.warn('Agent registry is not properly initialized or does not have registerAgentType method, skipping agent registration', 'NeuroNest');
+      return;
+    }
     
-    // Register developer agent
-    this.agentRegistry.registerAgentType('developer', (eventStream, llmProvider) => {
-      return new DeveloperAgent(eventStream, llmProvider);
-    });
-    this.logger.info('Registered developer agent type', 'NeuroNest');
-    
-    // Register editor agent
-    this.agentRegistry.registerAgentType('editor', (eventStream, llmProvider) => {
-      return new EditorAgent(eventStream, llmProvider);
-    });
-    this.logger.info('Registered editor agent type', 'NeuroNest');
+    try {
+      // Register thinking agent
+      this.agentRegistry.registerAgentType('thinking', (eventStream, llmProvider) => {
+        return new ThinkingAgent(eventStream, llmProvider);
+      });
+      this.logger.info('Registered thinking agent type', 'NeuroNest');
+      
+      // Register developer agent
+      this.agentRegistry.registerAgentType('developer', (eventStream, llmProvider) => {
+        return new DeveloperAgent(eventStream, llmProvider);
+      });
+      this.logger.info('Registered developer agent type', 'NeuroNest');
+      
+      // Register editor agent
+      this.agentRegistry.registerAgentType('editor', (eventStream, llmProvider) => {
+        return new EditorAgent(eventStream, llmProvider);
+      });
+      this.logger.info('Registered editor agent type', 'NeuroNest');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to register agent types: ${errorMessage}`, 'NeuroNest');
+    }
     
     // Additional agent types can be registered here
   }
@@ -216,9 +265,21 @@ export class NeuroNest {
    * Register runtime environments
    */
   private registerRuntimeEnvironments(): void {
-    // Register Docker runtime
-    this.runtimeRegistry.registerRuntime('docker', (config) => new DockerRuntime(config));
-    this.logger.info('Registered Docker runtime', 'NeuroNest');
+    // Check if runtimeRegistry exists and has the registerRuntime method
+    if (!this.runtimeRegistry || typeof this.runtimeRegistry.registerRuntime !== 'function') {
+      this.logger.warn('Runtime registry is not properly initialized or does not have registerRuntime method, skipping runtime registration', 'NeuroNest');
+      return;
+    }
+    
+    try {
+      // Register Docker runtime
+      const dockerRuntime = new DockerRuntime();
+      this.runtimeRegistry.registerRuntime('docker', dockerRuntime);
+      this.logger.info('Registered Docker runtime', 'NeuroNest');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to register runtime environments: ${errorMessage}`, 'NeuroNest');
+    }
     
     // Additional runtime environments can be registered here
   }

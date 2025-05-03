@@ -8,6 +8,7 @@ import * as readline from 'readline';
 import { NeuroNest } from './NeuroNest';
 import { Logger, LogLevel } from './core/monitoring/Logger';
 import { SimpleTask } from './core/tasks/SimpleTask';
+import { MessageAction, ShellCommandAction } from './core/events/Action';
 import { TaskStatus } from './core/tasks/Task';
 
 // Load environment variables
@@ -58,7 +59,8 @@ class NeuroNestCLI {
       
       this.logger.info('NeuroNest CLI initialized successfully', 'CLI');
     } catch (error) {
-      this.logger.error(`Failed to initialize NeuroNest CLI: ${error.message}`, 'CLI', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to initialize NeuroNest CLI: ${errorMessage}`, 'CLI', error);
       throw error;
     }
   }
@@ -94,7 +96,8 @@ class NeuroNestCLI {
       try {
         await this.handleCommand(input);
       } catch (error) {
-        console.error(`Error: ${error.message}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`Error: ${errorMessage}`);
       }
       
       this.rl.prompt();
@@ -266,7 +269,7 @@ class NeuroNestCLI {
       console.log('  No active tasks');
     } else {
       for (const task of activeTasks) {
-        console.log(`  ${task.getId()}: ${task.getName()} (${task.getStatus()})`);
+        console.log(`  ${task.id}: ${task.name} (${task.status})`);
       }
     }
     
@@ -286,7 +289,7 @@ class NeuroNestCLI {
       console.log('  No plugins installed');
     } else {
       for (const plugin of plugins) {
-        console.log(`  ${plugin.getName()} v${plugin.getVersion()}: ${plugin.getDescription()}`);
+        console.log(`  ${plugin.name} v${plugin.version}: ${plugin.description}`);
       }
     }
     
@@ -355,18 +358,16 @@ class NeuroNestCLI {
         return;
       }
       
+      // Create a message action
+      const agentId = this.neuroNest.getAgentManager().getDefaultAgent().id;
+      const messageAction = new MessageAction(question, agentId);
+      
       // Create a simple task
       const task = new SimpleTask({
         name: 'Ask Question',
         description: `Answer the question: ${question}`,
-        action: async () => {
-          const response = await provider.complete({
-            prompt: question,
-            maxTokens: 1000
-          });
-          
-          return response.text;
-        }
+        agent: this.neuroNest.getAgentManager().getDefaultAgent(),
+        initialAction: messageAction
       });
       
       // Execute the task
@@ -374,7 +375,8 @@ class NeuroNestCLI {
       
       console.log(`\n${result}`);
     } catch (error) {
-      console.error(`\nError: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`\nError: ${errorMessage}`);
     }
     
     console.log('');
@@ -395,15 +397,16 @@ class NeuroNestCLI {
     try {
       const taskManager = this.neuroNest.getTaskManager();
       
+      // Create a shell command action
+      const agentId = this.neuroNest.getAgentManager().getDefaultAgent().id;
+      const shellAction = new ShellCommandAction(command, agentId);
+      
       // Create a simple task
       const task = new SimpleTask({
         name: 'Execute Command',
         description: `Execute command: ${command}`,
-        action: async () => {
-          // This is a placeholder for actual command execution
-          // In a real implementation, this would use the runtime system
-          return `Executed command: ${command}`;
-        }
+        agent: this.neuroNest.getAgentManager().getDefaultAgent(),
+        initialAction: shellAction
       });
       
       // Execute the task
@@ -411,7 +414,8 @@ class NeuroNestCLI {
       
       console.log(`\n${result}`);
     } catch (error) {
-      console.error(`\nError: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`\nError: ${errorMessage}`);
     }
     
     console.log('');
@@ -435,7 +439,8 @@ async function main() {
     // Start CLI
     cli.start();
   } catch (error) {
-    console.error(`Failed to start NeuroNest CLI: ${error.message}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`Failed to start NeuroNest CLI: ${errorMessage}`);
     process.exit(1);
   }
 }

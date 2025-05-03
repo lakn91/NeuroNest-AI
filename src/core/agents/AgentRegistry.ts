@@ -102,6 +102,20 @@ export class AgentRegistry {
   }
   
   /**
+   * Get the default agent (first agent or create a thinking agent if none exists)
+   * @returns The default agent
+   */
+  getDefaultAgent(): Agent {
+    const agents = this.getAllAgents();
+    if (agents.length > 0) {
+      return agents[0];
+    }
+    
+    // If no agents exist, throw an error - the application should create at least one agent
+    throw new Error('No agents available. Please initialize the application properly.');
+  }
+  
+  /**
    * Remove an agent instance
    * @param id The ID of the agent to remove
    */
