@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Body
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel
 import logging
+import inspect
 from app.services.runtime_service import RuntimeService
+try:
+    from app.services.supabase_runtime_service import SupabaseRuntimeService
+except ImportError:
+    pass
 from app.core.dependencies import get_current_user
 from app.api.deps import get_runtime_service
 from app.models.execution import RuntimeEnvironment, RuntimeStatus, RuntimeLog
+from app.models.user import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -25,25 +31,56 @@ class RuntimeCommandRequest(BaseModel):
 async def create_runtime(
     request: RuntimeRequest, 
     background_tasks: BackgroundTasks,
-    runtime_service: RuntimeService = Depends(get_runtime_service)
+    current_user: User = Depends(get_current_user),
+    runtime_service = Depends(get_runtime_service)
 ):
     """
     Create a new runtime environment for a project
     """
     try:
-        runtime = await runtime_service.create_runtime(
-            project_id=request.project_id,
-            language=request.language,
-            environment_vars=request.environment_vars or {},
-            entry_point=request.entry_point,
-            timeout=request.timeout
-        )
+        # Check if the runtime service has the create_runtime method with user_id parameter
+        create_runtime_params = inspect.signature(runtime_service.create_runtime).parameters
+        has_user_id = 'user_id' in create_runtime_params
         
-        # Start the runtime in the background
-        background_tasks.add_task(
-            runtime_service.start_runtime,
-            runtime_id=runtime.id
-        )
+        if has_user_id:
+            # This is the Supabase version
+            runtime = await runtime_service.create_runtime(
+                project_id=request.project_id,
+                language=request.language,
+                user_id=current_user.id,
+                environment_vars=request.environment_vars or {},
+                entry_point=request.entry_point,
+                timeout=request.timeout
+            )
+            
+            # Start the runtime in the background
+            start_runtime_params = inspect.signature(runtime_service.start_runtime).parameters
+            if 'user_id' in start_runtime_params:
+                background_tasks.add_task(
+                    runtime_service.start_runtime,
+                    runtime_id=runtime.id,
+                    user_id=current_user.id
+                )
+            else:
+                background_tasks.add_task(
+                    runtime_service.start_runtime,
+                    runtime_id=runtime.id
+                )
+        else:
+            # This is the standard version
+            runtime = await runtime_service.create_runtime(
+                project_id=request.project_id,
+                language=request.language,
+                environment_vars=request.environment_vars or {},
+                entry_point=request.entry_point,
+                timeout=request.timeout
+            )
+            
+            # Start the runtime in the background
+            background_tasks.add_task(
+                runtime_service.start_runtime,
+                runtime_id=runtime.id
+            )
         
         return runtime
     except Exception as e:
@@ -68,16 +105,31 @@ async def get_runtime_status(
 @router.post("/execute", response_model=Dict[str, Any])
 async def execute_command(
     request: RuntimeCommandRequest,
-    runtime_service: RuntimeService = Depends(get_runtime_service)
+    current_user: User = Depends(get_current_user),
+    runtime_service = Depends(get_runtime_service)
 ):
     """
     Execute a command in a runtime environment
     """
     try:
-        result = await runtime_service.execute_command(
-            runtime_id=request.runtime_id,
-            command=request.command
-        )
+        # Check if the runtime service has the execute_command method with user_id parameter
+        execute_command_params = inspect.signature(runtime_service.execute_command).parameters
+        has_user_id = 'user_id' in execute_command_params
+        
+        if has_user_id:
+            # This is the Supabase version
+            result = await runtime_service.execute_command(
+                runtime_id=request.runtime_id,
+                user_id=current_user.id,
+                command=request.command
+            )
+        else:
+            # This is the standard version
+            result = await runtime_service.execute_command(
+                runtime_id=request.runtime_id,
+                command=request.command
+            )
+            
         return {"result": result}
     except Exception as e:
         logger.error(f"Error executing command: {str(e)}", exc_info=True)
@@ -107,13 +159,24 @@ async def get_runtime_logs(
 @router.post("/stop/{runtime_id}")
 async def stop_runtime(
     runtime_id: str,
-    runtime_service: RuntimeService = Depends(get_runtime_service)
+    current_user: User = Depends(get_current_user),
+    runtime_service = Depends(get_runtime_service)
 ):
     """
     Stop a runtime environment
     """
     try:
-        await runtime_service.stop_runtime(runtime_id)
+        # Check if the runtime service has the stop_runtime method with user_id parameter
+        stop_runtime_params = inspect.signature(runtime_service.stop_runtime).parameters
+        has_user_id = 'user_id' in stop_runtime_params
+        
+        if has_user_id:
+            # This is the Supabase version
+            await runtime_service.stop_runtime(runtime_id, current_user.id)
+        else:
+            # This is the standard version
+            await runtime_service.stop_runtime(runtime_id)
+            
         return {"status": "stopped", "runtime_id": runtime_id}
     except Exception as e:
         logger.error(f"Error stopping runtime: {str(e)}", exc_info=True)
@@ -123,19 +186,40 @@ async def stop_runtime(
 async def restart_runtime(
     runtime_id: str, 
     background_tasks: BackgroundTasks,
-    runtime_service: RuntimeService = Depends(get_runtime_service)
+    current_user: User = Depends(get_current_user),
+    runtime_service = Depends(get_runtime_service)
 ):
     """
     Restart a runtime environment
     """
     try:
-        await runtime_service.stop_runtime(runtime_id)
+        # Check if the runtime service has the stop_runtime method with user_id parameter
+        stop_runtime_params = inspect.signature(runtime_service.stop_runtime).parameters
+        has_user_id_stop = 'user_id' in stop_runtime_params
+        
+        # Check if the runtime service has the start_runtime method with user_id parameter
+        start_runtime_params = inspect.signature(runtime_service.start_runtime).parameters
+        has_user_id_start = 'user_id' in start_runtime_params
+        
+        if has_user_id_stop:
+            # This is the Supabase version
+            await runtime_service.stop_runtime(runtime_id, current_user.id)
+        else:
+            # This is the standard version
+            await runtime_service.stop_runtime(runtime_id)
         
         # Start the runtime in the background
-        background_tasks.add_task(
-            runtime_service.start_runtime,
-            runtime_id=runtime_id
-        )
+        if has_user_id_start:
+            background_tasks.add_task(
+                runtime_service.start_runtime,
+                runtime_id=runtime_id,
+                user_id=current_user.id
+            )
+        else:
+            background_tasks.add_task(
+                runtime_service.start_runtime,
+                runtime_id=runtime_id
+            )
         
         return await runtime_service.get_runtime_status(runtime_id)
     except Exception as e:
@@ -145,13 +229,24 @@ async def restart_runtime(
 @router.get("/list", response_model=List[RuntimeEnvironment])
 async def list_runtimes(
     project_id: Optional[str] = None,
-    runtime_service: RuntimeService = Depends(get_runtime_service)
+    current_user: User = Depends(get_current_user),
+    runtime_service = Depends(get_runtime_service)
 ):
     """
     List all runtime environments, optionally filtered by project_id
     """
     try:
-        runtimes = await runtime_service.list_runtimes(project_id)
+        # Check if the runtime service has the list_runtimes method with user_id parameter
+        list_runtimes_params = inspect.signature(runtime_service.list_runtimes).parameters
+        has_user_id = 'user_id' in list_runtimes_params
+        
+        if has_user_id:
+            # This is the Supabase version
+            runtimes = await runtime_service.list_runtimes(project_id, current_user.id)
+        else:
+            # This is the standard version
+            runtimes = await runtime_service.list_runtimes(project_id)
+            
         return runtimes
     except Exception as e:
         logger.error(f"Error listing runtimes: {str(e)}", exc_info=True)
@@ -160,13 +255,24 @@ async def list_runtimes(
 @router.delete("/{runtime_id}")
 async def delete_runtime(
     runtime_id: str,
-    runtime_service: RuntimeService = Depends(get_runtime_service)
+    current_user: User = Depends(get_current_user),
+    runtime_service = Depends(get_runtime_service)
 ):
     """
     Delete a runtime environment
     """
     try:
-        await runtime_service.delete_runtime(runtime_id)
+        # Check if the runtime service has the delete_runtime method with user_id parameter
+        delete_runtime_params = inspect.signature(runtime_service.delete_runtime).parameters
+        has_user_id = 'user_id' in delete_runtime_params
+        
+        if has_user_id:
+            # This is the Supabase version
+            await runtime_service.delete_runtime(runtime_id, current_user.id)
+        else:
+            # This is the standard version
+            await runtime_service.delete_runtime(runtime_id)
+            
         return {"status": "deleted", "runtime_id": runtime_id}
     except Exception as e:
         logger.error(f"Error deleting runtime: {str(e)}", exc_info=True)

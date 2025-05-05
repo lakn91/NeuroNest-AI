@@ -1,8 +1,31 @@
+# Core dependencies
 fastapi>=0.95.0
 uvicorn>=0.21.1
 pydantic>=2.0.0
+pydantic-settings>=2.0.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.6
+
+# Database
+asyncpg>=0.27.0  # PostgreSQL async driver
+redis>=4.5.1  # Redis client
+aioredis>=2.0.1  # Redis async client
+sqlalchemy>=2.0.0  # SQL ORM
+alembic>=1.10.0  # Database migrations
+
+# Authentication
+python-jose>=3.3.0  # JWT
+passlib>=1.7.4  # Password hashing
+bcrypt>=4.0.1  # Password hashing
+
+# Logging
+loguru>=0.7.0  # Better logging
+
+# HTTP
+httpx>=0.24.0  # Async HTTP client
+aiofiles>=23.1.0  # Async file operations
+
+# AI/ML
 langchain>=0.0.267
 langchain-openai>=0.0.2
 langchain-google-genai>=0.0.5
@@ -11,29 +34,42 @@ langchain-community>=0.0.10
 google-generativeai>=0.3.0
 openai>=1.3.0
 anthropic>=0.5.0
-firebase-admin>=6.2.0
-python-jose>=3.3.0
-passlib>=1.7.4
-bcrypt>=4.0.1
-httpx>=0.24.0
+
+# External services
+firebase-admin>=6.2.0  # Firebase
+supabase>=1.0.3  # Supabase
+
+# Testing
 pytest>=7.3.1
 pytest-asyncio>=0.21.0
-aiofiles>=23.1.0
+pytest-cov>=4.1.0
+
+# Document processing
 jinja2>=3.1.2
 markdown>=3.4.3
 PyPDF2>=3.0.1
-pillow>=9.5.0
+pymupdf>=1.23.7
+beautifulsoup4>=4.12.2
+lxml>=4.9.3
+
+# Data processing
 numpy>=1.24.3
 pandas>=2.0.0
 matplotlib>=3.7.1
+
+# Vector databases
+faiss-cpu>=1.7.4
+chromadb>=0.4.18
+tiktoken>=0.5.1
+
+# Container management
 docker>=6.1.2
+
+# Speech recognition
 SpeechRecognition>=3.10.0
 pydub>=0.25.1
 librosa>=0.10.0
 soundfile>=0.12.1
-tiktoken>=0.5.1
-faiss-cpu>=1.7.4
-chromadb>=0.4.18
-pymupdf>=1.23.7
-beautifulsoup4>=4.12.2
-lxml>=4.9.3
+
+# Image processing
+pillow>=9.5.0

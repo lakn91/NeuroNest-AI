@@ -2,12 +2,13 @@
 Dependency injection for FastAPI routes.
 """
 
-from typing import Generator, Optional
+from typing import Generator, Optional, Union
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import logging
+import os
 
 from app.config import settings
 from app.models.user import User, UserInDB
@@ -15,6 +16,14 @@ from app.services.orchestration_service import OrchestrationService
 from app.services.document_index_service import DocumentIndexService
 from app.services.memory_service import MemoryService
 from app.services.runtime_service import RuntimeService
+
+# Import Supabase services if available
+try:
+    from app.services.supabase_runtime_service import SupabaseRuntimeService
+    from app.services.supabase_orchestration_service import SupabaseOrchestrationService
+    SUPABASE_SERVICES_AVAILABLE = True
+except ImportError:
+    SUPABASE_SERVICES_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +35,36 @@ _orchestration_service = None
 _document_index_service = None
 _memory_service = None
 _runtime_service = None
+_supabase_runtime_service = None
+_supabase_orchestration_service = None
 
-def get_orchestration_service() -> OrchestrationService:
+# Determine if we should use Supabase services
+USE_SUPABASE = os.environ.get("USE_SUPABASE", "false").lower() == "true" and SUPABASE_SERVICES_AVAILABLE
+
+def get_orchestration_service() -> Union[OrchestrationService, 'SupabaseOrchestrationService']:
     """
     Get the orchestration service instance.
+    If USE_SUPABASE is True and Supabase services are available, returns SupabaseOrchestrationService.
+    Otherwise, returns OrchestrationService.
     """
-    global _orchestration_service
-    if _orchestration_service is None:
-        _orchestration_service = OrchestrationService()
-    return _orchestration_service
+    global _orchestration_service, _supabase_orchestration_service
+    
+    if USE_SUPABASE:
+        if _supabase_orchestration_service is None:
+            try:
+                _supabase_orchestration_service = SupabaseOrchestrationService()
+                logger.info("Using Supabase Orchestration Service")
+            except Exception as e:
+                logger.error(f"Error initializing Supabase Orchestration Service: {e}")
+                logger.info("Falling back to standard Orchestration Service")
+                if _orchestration_service is None:
+                    _orchestration_service = OrchestrationService()
+                return _orchestration_service
+        return _supabase_orchestration_service
+    else:
+        if _orchestration_service is None:
+            _orchestration_service = OrchestrationService()
+        return _orchestration_service
 
 def get_document_index_service() -> DocumentIndexService:
     """
@@ -54,14 +84,30 @@ def get_memory_service() -> MemoryService:
         _memory_service = MemoryService()
     return _memory_service
 
-def get_runtime_service() -> RuntimeService:
+def get_runtime_service() -> Union[RuntimeService, 'SupabaseRuntimeService']:
     """
     Get the runtime service instance.
+    If USE_SUPABASE is True and Supabase services are available, returns SupabaseRuntimeService.
+    Otherwise, returns RuntimeService.
     """
-    global _runtime_service
-    if _runtime_service is None:
-        _runtime_service = RuntimeService()
-    return _runtime_service
+    global _runtime_service, _supabase_runtime_service
+    
+    if USE_SUPABASE:
+        if _supabase_runtime_service is None:
+            try:
+                _supabase_runtime_service = SupabaseRuntimeService()
+                logger.info("Using Supabase Runtime Service")
+            except Exception as e:
+                logger.error(f"Error initializing Supabase Runtime Service: {e}")
+                logger.info("Falling back to standard Runtime Service")
+                if _runtime_service is None:
+                    _runtime_service = RuntimeService()
+                return _runtime_service
+        return _supabase_runtime_service
+    else:
+        if _runtime_service is None:
+            _runtime_service = RuntimeService()
+        return _runtime_service
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     """

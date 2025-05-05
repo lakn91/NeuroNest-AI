@@ -51,6 +51,76 @@ create table public.agent_memories (
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
+-- Create runtimes table
+create table public.runtimes (
+  id uuid default uuid_generate_v4() not null primary key,
+  project_id uuid references public.projects on delete cascade not null,
+  user_id uuid references public.profiles on delete cascade not null,
+  language text not null,
+  status text not null,
+  environment_vars jsonb default '{}'::jsonb,
+  entry_point text,
+  container_id text,
+  port text,
+  url text,
+  timeout integer default 300,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- Create runtime_logs table
+create table public.runtime_logs (
+  id uuid default uuid_generate_v4() not null primary key,
+  runtime_id uuid references public.runtimes on delete cascade not null,
+  user_id uuid references public.profiles on delete cascade not null,
+  timestamp timestamp with time zone default timezone('utc'::text, now()) not null,
+  message text not null,
+  type text not null
+);
+
+-- Create orchestration_tasks table
+create table public.orchestration_tasks (
+  id uuid default uuid_generate_v4() not null primary key,
+  user_id uuid references public.profiles on delete cascade not null,
+  task_type text not null,
+  input_data jsonb not null,
+  context jsonb default '{}'::jsonb,
+  tools jsonb default '[]'::jsonb,
+  memory_id uuid references public.agent_memories on delete set null,
+  agent_id text,
+  status text not null,
+  result jsonb,
+  error text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- Create orchestration_agents table
+create table public.orchestration_agents (
+  id uuid default uuid_generate_v4() not null primary key,
+  user_id uuid references public.profiles on delete cascade not null,
+  name text not null,
+  description text,
+  capabilities jsonb default '[]'::jsonb,
+  status text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- Create orchestration_workflows table
+create table public.orchestration_workflows (
+  id uuid default uuid_generate_v4() not null primary key,
+  user_id uuid references public.profiles on delete cascade not null,
+  name text not null,
+  description text,
+  steps jsonb default '[]'::jsonb,
+  status text not null,
+  results jsonb default '{}'::jsonb,
+  error text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
 -- Create RLS policies
 
 -- Profiles policies
@@ -113,11 +183,93 @@ create policy "Users can delete their own agent memories"
   on agent_memories for delete
   using (auth.uid() = user_id);
 
+-- Runtimes policies
+create policy "Users can view their own runtimes"
+  on runtimes for select
+  using (auth.uid() = user_id);
+
+create policy "Users can create their own runtimes"
+  on runtimes for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own runtimes"
+  on runtimes for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own runtimes"
+  on runtimes for delete
+  using (auth.uid() = user_id);
+
+-- Runtime logs policies
+create policy "Users can view their own runtime logs"
+  on runtime_logs for select
+  using (auth.uid() = user_id);
+
+create policy "Users can create their own runtime logs"
+  on runtime_logs for insert
+  with check (auth.uid() = user_id);
+
+-- Orchestration tasks policies
+create policy "Users can view their own orchestration tasks"
+  on orchestration_tasks for select
+  using (auth.uid() = user_id);
+
+create policy "Users can create their own orchestration tasks"
+  on orchestration_tasks for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own orchestration tasks"
+  on orchestration_tasks for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own orchestration tasks"
+  on orchestration_tasks for delete
+  using (auth.uid() = user_id);
+
+-- Orchestration agents policies
+create policy "Users can view their own orchestration agents"
+  on orchestration_agents for select
+  using (auth.uid() = user_id);
+
+create policy "Users can create their own orchestration agents"
+  on orchestration_agents for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own orchestration agents"
+  on orchestration_agents for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own orchestration agents"
+  on orchestration_agents for delete
+  using (auth.uid() = user_id);
+
+-- Orchestration workflows policies
+create policy "Users can view their own orchestration workflows"
+  on orchestration_workflows for select
+  using (auth.uid() = user_id);
+
+create policy "Users can create their own orchestration workflows"
+  on orchestration_workflows for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own orchestration workflows"
+  on orchestration_workflows for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own orchestration workflows"
+  on orchestration_workflows for delete
+  using (auth.uid() = user_id);
+
 -- Enable RLS on all tables
 alter table public.profiles enable row level security;
 alter table public.projects enable row level security;
 alter table public.conversations enable row level security;
 alter table public.agent_memories enable row level security;
+alter table public.runtimes enable row level security;
+alter table public.runtime_logs enable row level security;
+alter table public.orchestration_tasks enable row level security;
+alter table public.orchestration_agents enable row level security;
+alter table public.orchestration_workflows enable row level security;
 
 -- Create functions
 
@@ -183,4 +335,20 @@ create trigger update_conversations_updated_at
 
 create trigger update_agent_memories_updated_at
   before update on public.agent_memories
+  for each row execute procedure public.update_updated_at_column();
+
+create trigger update_runtimes_updated_at
+  before update on public.runtimes
+  for each row execute procedure public.update_updated_at_column();
+
+create trigger update_orchestration_tasks_updated_at
+  before update on public.orchestration_tasks
+  for each row execute procedure public.update_updated_at_column();
+
+create trigger update_orchestration_agents_updated_at
+  before update on public.orchestration_agents
+  for each row execute procedure public.update_updated_at_column();
+
+create trigger update_orchestration_workflows_updated_at
+  before update on public.orchestration_workflows
   for each row execute procedure public.update_updated_at_column();
